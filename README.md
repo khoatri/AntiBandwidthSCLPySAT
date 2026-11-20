@@ -4,7 +4,7 @@ A SAT-based solver for the **Anti-Bandwidth Problem (ABP)** using the **SCL enco
 
 Given an undirected graph $G = (V, E)$ with $n = |V|$ vertices, the Anti-Bandwidth Problem seeks a bijective labeling $\phi: V \to \{1, 2, \dots, n\}$ that maximizes the minimum label difference between adjacent vertices:
 
-$$\operatorname{AB}(G) = \max_{\phi} \min_{\{u, v\} \in E} |\phi(u) - \phi(v)|$$
+$$\mathrm{AB}(G) = \max_{\phi} \min_{\{u, v\} \in E} |\phi(u) - \phi(v)|$$
 
 The SCL encoding partitions the vertex-label assignment domain into $K = \lceil n/w \rceil$ blocks, maintains prefix/suffix ladder summaries with the Sequential Counter formulation, and enforces sliding window edge exclusions.
 
@@ -108,7 +108,7 @@ python -m src.cli inspect -g instances/A-pores_1.mtx.rnd -s h
 
 #### 1.2. `solve` Subcommand
 
-Solves a single decision problem instance: **Is $\operatorname{AB}(G) \ge w$?** Returns `SAT`, `UNSAT`, `TIMEOUT`, `MEMOUT`, or `ERROR`. Every satisfiable solution is verified at runtime against domain bijectivity and distance constraints.
+Solves a single decision problem instance: **Is $\mathrm{AB}(G) \ge w$?** Returns `SAT`, `UNSAT`, `TIMEOUT`, `MEMOUT`, or `ERROR`. Every satisfiable solution is verified at runtime against domain bijectivity and distance constraints.
 
 **Arguments:**
 
@@ -248,5 +248,5 @@ Symmetry breaking eliminates this duality by enforcing $\phi(s) \le \lceil n/2 \
 | :---: | :--- | :--- | :--- |
 | `n` | None | No symmetry breaking applied. | $0$ |
 | `f` | First-vertex | $s = 1$ (first vertex in graph). | $\lfloor n/2 \rfloor$ clauses $\neg A_{1, \ell}$ for $\ell > \lceil n/2 \rceil$ |
-| `h` | Half-degree (Max) | $s = \operatorname{argmax}_{v} \operatorname{deg}(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |
-| `l` | Lowest-degree (Min) | $s = \operatorname{argmin}_{v} \operatorname{deg}(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |
+| `h` | Half-degree (Max) | $s = \arg\max_{v} \deg(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |
+| `l` | Lowest-degree (Min) | $s = \arg\min_{v} \deg(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |

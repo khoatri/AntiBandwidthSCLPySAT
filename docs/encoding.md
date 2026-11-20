@@ -16,7 +16,7 @@ This document specifies the SCL encoding (Sequential Counter encoding for Ladder
 ### Primary Boolean Variables
 - **Assignment Variable**: $A_{v, \ell} \iff \text{vertex } v \text{ receives label } \ell$.
 - **Indexing in PySAT**:
-  $$\operatorname{id}(A_{v, \ell}) = (v - 1)n + \ell \quad (1 \le \operatorname{id} \le n^2)$$
+  $$\mathrm{id}(A_{v, \ell}) = (v - 1)n + \ell \quad (1 \le \mathrm{id} \le n^2)$$
 - All auxiliary variables are allocated sequentially starting from $n^2 + 1$ using a single shared ID allocator.
 
 ---
@@ -48,7 +48,7 @@ Encoded via a **2-Product Exactly-One** constraint over inputs $x_0, \ldots, x_{
    - **At-least-one (ALO)**:
      $$\bigvee_{i=0}^{n-1} x_i$$
    - **At-most-one (AMO)** on selectors:
-     $$\operatorname{AMO}(r_0, \ldots, r_{p-1}) \land \operatorname{AMO}(c_0, \ldots, c_{q-1})$$
+     $$\mathrm{AMO}(r_0, \ldots, r_{p-1}) \land \mathrm{AMO}(c_0, \ldots, c_{q-1})$$
 4. **Base Case $n=2$**:
    - Emit directly: $(x_0 \lor x_1)$ and $(\neg x_0 \lor \neg x_1)$ with no auxiliary selector variables.
 
