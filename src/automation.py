@@ -91,7 +91,11 @@ def build_automation_parser() -> argparse.ArgumentParser:
 def _discover_instances(instances_dir: Path) -> list[Path]:
     """Find and sort matching instance files."""
     if not instances_dir.exists():
-        return []
+        fallback = repo_root / instances_dir
+        if fallback.exists():
+            instances_dir = fallback
+        else:
+            return []
 
     files = [f for f in instances_dir.iterdir() if f.is_file() and f.name.endswith(".mtx.rnd")]
     return sorted(files, key=lambda p: p.name)
@@ -222,21 +226,27 @@ def run_campaign(args: argparse.Namespace) -> int:
     manifest_path.write_text(json.dumps(manifest_data, indent=2))
 
     summary_csv = output_dir / "summary.csv"
-    existing_instances: set[str] = set()
+    rows_by_instance: dict[str, dict[str, str]] = {}
 
     # If CSV already exists, read processed instances to prevent duplicate header/records
     if summary_csv.exists() and summary_csv.stat().st_size > 0:
         with open(summary_csv, mode="r", newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            for row in reader:
-                if row.get("instance"):
-                    existing_instances.add(row["instance"])
+            for r in reader:
+                inst_key = r.get("instance")
+                if inst_key:
+                    rows_by_instance[inst_key] = r
 
-    csv_file = open(summary_csv, mode="a", newline="", encoding="utf-8")
-    writer = csv.DictWriter(csv_file, fieldnames=CSV_COLUMNS)
-    if summary_csv.stat().st_size == 0:
-        writer.writeheader()
-        csv_file.flush()
+    def flush_summary_csv() -> None:
+        with open(summary_csv, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+            writer.writeheader()
+            for r in rows_by_instance.values():
+                writer.writerow(r)
+            f.flush()
+
+    if not summary_csv.exists() or summary_csv.stat().st_size == 0:
+        flush_summary_csv()
 
     total = len(instances)
     if not args.quiet:
@@ -245,51 +255,46 @@ def run_campaign(args: argparse.Namespace) -> int:
         print(f"Symmetry: {args.sym}, Timeout: {args.timeout}s, Mem limit: {args.mem_limit} GB")
         print("-" * 75)
 
-    try:
-        for idx, inst_path in enumerate(instances, start=1):
-            json_file = results_dir / f"{inst_path.name}.json"
+    for idx, inst_path in enumerate(instances, start=1):
+        json_file = results_dir / f"{inst_path.name}.json"
 
-            if args.skip_existing and json_file.exists():
-                if not args.quiet:
-                    print(f"[{idx}/{total}] Skipping existing: {inst_path.name}")
-                continue
-
-            try:
-                row = _process_instance(
-                    inst_path=inst_path,
-                    output_dir=output_dir,
-                    sym_mode=args.sym,
-                    timeout=args.timeout,
-                    mem_limit=args.mem_limit,
-                    start_w_mode=args.start_w_mode,
-                )
-            except Exception as exc:
-                sys.stderr.write(f"[{idx}/{total}] ERROR processing {inst_path.name}: {exc}\n")
-                row = {col: "" for col in CSV_COLUMNS}
-                row["instance"] = inst_path.name
-                row["status"] = "ERROR"
-
-            # Write to CSV immediately and flush to guarantee persistence
-            if row["instance"] not in existing_instances:
-                writer.writerow(row)
-                csv_file.flush()
-                existing_instances.add(row["instance"])
-
+        if args.skip_existing and json_file.exists():
             if not args.quiet:
-                w_str = row["optimal_w"] if row["optimal_w"] else "None"
-                bounds_str = (
-                    f"[{row['lower_bound']}..{row['upper_bound']}]"
-                    if row.get("lower_bound") and row.get("upper_bound")
-                    else ""
-                )
-                print(
-                    f"[{idx}/{total}] {inst_path.name:<25} "
-                    f"bounds={bounds_str:<10} "
-                    f"w*={w_str:<4} status={row['status']:<10} "
-                    f"time={row['total_time_s']:<8}s verified={row['verified']}"
-                )
-    finally:
-        csv_file.close()
+                print(f"[{idx}/{total}] Skipping existing: {inst_path.name}")
+            continue
+
+        try:
+            row = _process_instance(
+                inst_path=inst_path,
+                output_dir=output_dir,
+                sym_mode=args.sym,
+                timeout=args.timeout,
+                mem_limit=args.mem_limit,
+                start_w_mode=args.start_w_mode,
+            )
+        except Exception as exc:
+            sys.stderr.write(f"[{idx}/{total}] ERROR processing {inst_path.name}: {exc}\n")
+            row = {col: "" for col in CSV_COLUMNS}
+            row["instance"] = inst_path.name
+            row["status"] = "ERROR"
+
+        # Update CSV immediately and flush to guarantee persistence
+        rows_by_instance[row["instance"]] = row
+        flush_summary_csv()
+
+        if not args.quiet:
+            w_str = row["optimal_w"] if row["optimal_w"] else "None"
+            bounds_str = (
+                f"[{row['lower_bound']}..{row['upper_bound']}]"
+                if row.get("lower_bound") and row.get("upper_bound")
+                else ""
+            )
+            print(
+                f"[{idx}/{total}] {inst_path.name:<25} "
+                f"bounds={bounds_str:<10} "
+                f"w*={w_str:<4} status={row['status']:<10} "
+                f"time={row['total_time_s']:<8}s verified={row['verified']}"
+            )
 
     if not args.quiet:
         print("-" * 75)

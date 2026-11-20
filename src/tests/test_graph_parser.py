@@ -185,6 +185,11 @@ def test_graph_get_lower_and_upper_bounds_all_24_benchmarks() -> None:
         assert g_stem.get_lower_bound() == expected_lb, f"LB failed for stem {stem}"
         assert g_stem.get_upper_bound() == expected_ub, f"UB failed for stem {stem}"
 
+        # Test name with .mtx extension (e.g. A-pores_1.mtx or pores_1.mtx)
+        g_mtx = Graph(n=1000, edges=((1, 2),), name=f"{stem}.mtx")
+        assert g_mtx.get_lower_bound() == expected_lb, f"LB failed for mtx {stem}.mtx"
+        assert g_mtx.get_upper_bound() == expected_ub, f"UB failed for mtx {stem}.mtx"
+
 
 def test_graph_get_bounds_path_and_unrecognized_fallback() -> None:
     # Full file path with isolated vertices (n=30, 1 edge)
@@ -195,15 +200,25 @@ def test_graph_get_bounds_path_and_unrecognized_fallback() -> None:
     # Theoretical bound has isolated vertices, so n - 1 = 29
     assert g_path.get_theoretical_upper_bound() == 29
 
-    # Unknown graph without isolated vertices defaults to fallback 2 and theoretical n // 2
+    # Unknown graph without isolated vertices defaults to fallback 1 and theoretical n // 2 + 1
     g_unknown = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)), name="custom_graph.mtx.rnd")
-    assert g_unknown.get_lower_bound() == 2
+    assert g_unknown.get_lower_bound() == 1
     assert g_unknown.get_lower_bound(fallback=5) == 5
     assert g_unknown.get_upper_bound() == 2  # 4 // 2
     assert g_unknown.get_upper_bound(fallback=4) == 4
 
-    # Fallback LB clamped to at least 2
-    assert g_unknown.get_lower_bound(fallback=0) == 2
-    assert g_unknown.get_lower_bound(fallback=1) == 2
+    # Fallback LB can be 1 matching C++ reference
+    assert g_unknown.get_lower_bound(fallback=1) == 1
+
+
+def test_parse_instance_without_nombre_del_problema(tmp_path: Path) -> None:
+    # Benchmark instance without the optional 'Nombre del problema:' line
+    f = tmp_path / "A-pores_1.mtx.rnd"
+    f.write_text("30 7 1\n1 2\n")
+    g = parse_instance(f)
+    assert g.name == "A-pores_1.mtx.rnd"
+    assert g.get_lower_bound() == 6
+    assert g.get_upper_bound() == 8
+
 
 

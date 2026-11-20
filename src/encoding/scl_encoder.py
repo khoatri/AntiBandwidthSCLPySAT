@@ -112,7 +112,8 @@ class SCLEncoder:
             return var
 
         cache = IntervalSummaryCache(n=n, var_allocator=alloc_var)
-        all_clauses: List[List[int]] = []
+        cnf = CNF()
+        all_clauses = cnf.clauses
 
         # 1. Optional Symmetry Breaking
         sym_clauses = encode_symmetry_breaking(self.graph, self.sym_mode)
@@ -155,7 +156,7 @@ class SCLEncoder:
                 f"Clause count mismatch: generated {actual_n_clauses}, expected {expected_C}"
             )
 
-        cnf = CNF(from_clauses=all_clauses)
+        cnf.nv = actual_n_vars
 
         stats = {
             "n": n,

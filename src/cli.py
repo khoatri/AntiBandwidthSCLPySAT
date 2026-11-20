@@ -177,7 +177,7 @@ def handle_inspect(args: argparse.Namespace) -> int:
     ub = graph.get_upper_bound()
     u_theo = graph.get_theoretical_upper_bound()
 
-    effective_w = lb if args.width is None else args.width
+    effective_w = max(2, lb) if args.width is None else args.width
     if effective_w < 2 or effective_w > graph.n:
         sys.stderr.write(
             f"Error: Target bandwidth w must satisfy 2 <= w <= n ({graph.n}), got w={effective_w}\n"
@@ -237,7 +237,7 @@ def handle_solve(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error loading graph from '{args.graph}': {e}\n")
         return 1
 
-    effective_w = graph.get_lower_bound() if args.width is None else args.width
+    effective_w = max(2, graph.get_lower_bound()) if args.width is None else args.width
     if effective_w < 2:
         sys.stderr.write(f"Error: Width w must be >= 2, got w={effective_w}\n")
         return 1
@@ -287,6 +287,10 @@ def handle_solve(args: argparse.Namespace) -> int:
             "problem_name": graph.name or Path(args.graph).name,
             "n": graph.n,
             "m": graph.m,
+            "lower_bound": graph.get_lower_bound(),
+            "upper_bound": graph.get_upper_bound(),
+            "theoretical_upper_bound": graph.get_theoretical_upper_bound(),
+            "best_known_w": graph.best_known_w,
             "w": res.w,
             "sym_mode": args.sym,
             "status": res.status,
@@ -316,7 +320,9 @@ def handle_optimize(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error loading graph from '{args.graph}': {e}\n")
         return 1
 
-    effective_start_w = graph.get_lower_bound() if args.start_w is None else args.start_w
+    effective_start_w = (
+        max(2, graph.get_lower_bound()) if args.start_w is None else args.start_w
+    )
     if effective_start_w < 2:
         sys.stderr.write(f"Error: start-w must be >= 2, got start-w={effective_start_w}\n")
         return 1
@@ -391,9 +397,12 @@ def handle_optimize(args: argparse.Namespace) -> int:
             "problem_name": graph.name or Path(args.graph).name,
             "n": graph.n,
             "m": graph.m,
-            "start_w": args.start_w,
-            "sym_mode": args.sym,
+            "lower_bound": graph.get_lower_bound(),
             "upper_bound": res.upper_bound,
+            "theoretical_upper_bound": graph.get_theoretical_upper_bound(),
+            "best_known_w": graph.best_known_w,
+            "start_w": effective_start_w,
+            "sym_mode": args.sym,
             "optimal_w": res.optimal_w,
             "status": res.status,
             "total_time": round(res.total_time, 4),

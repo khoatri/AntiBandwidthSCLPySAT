@@ -70,10 +70,12 @@ def _build_normalized_bound_map(raw_map: dict[str, int]) -> dict[str, int]:
             else raw_name
         )
         normalized[stripped] = val
-        stem_raw = raw_name.replace(".mtx.rnd", "").replace(".rnd", "")
-        stem_stripped = stripped.replace(".mtx.rnd", "").replace(".rnd", "")
+        stem_raw = raw_name.replace(".mtx.rnd", "").replace(".rnd", "").replace(".mtx", "")
+        stem_stripped = stripped.replace(".mtx.rnd", "").replace(".rnd", "").replace(".mtx", "")
         normalized[stem_raw] = val
         normalized[stem_stripped] = val
+        normalized[f"{stem_raw}.mtx"] = val
+        normalized[f"{stem_stripped}.mtx"] = val
     return normalized
 
 
@@ -145,24 +147,24 @@ class Graph:
         """True if there is at least one vertex with degree 0."""
         return self.min_degree == 0
 
-    def get_lower_bound(self, fallback: int = 2) -> int:
-        """Returns the predefined benchmark lower bound if known, else clamped fallback (>= 2)."""
+    def get_lower_bound(self, fallback: int = 1) -> int:
+        """Returns the predefined benchmark lower bound if known, else fallback (default: 1, matching C++ reference)."""
         cleaned = self.name.strip()
         if "/" in cleaned or "\\" in cleaned:
             cleaned = Path(cleaned).name
         if cleaned in BENCHMARK_LOWER_BOUNDS:
-            return max(2, BENCHMARK_LOWER_BOUNDS[cleaned])
+            return BENCHMARK_LOWER_BOUNDS[cleaned]
         stripped = (
             cleaned[2:]
             if (len(cleaned) >= 2 and cleaned[0].isalpha() and cleaned[1] == "-")
             else cleaned
         )
         if stripped in BENCHMARK_LOWER_BOUNDS:
-            return max(2, BENCHMARK_LOWER_BOUNDS[stripped])
-        stem = cleaned.replace(".mtx.rnd", "").replace(".rnd", "")
+            return BENCHMARK_LOWER_BOUNDS[stripped]
+        stem = cleaned.replace(".mtx.rnd", "").replace(".rnd", "").replace(".mtx", "")
         if stem in BENCHMARK_LOWER_BOUNDS:
-            return max(2, BENCHMARK_LOWER_BOUNDS[stem])
-        return max(2, fallback)
+            return BENCHMARK_LOWER_BOUNDS[stem]
+        return max(1, fallback)
 
     def get_theoretical_upper_bound(self) -> int:
         """Theoretical upper bound based on graph topology (no isolated vertices: floor(n/2), else n-1)."""
@@ -188,7 +190,7 @@ class Graph:
         )
         if stripped in BENCHMARK_UPPER_BOUNDS:
             return BENCHMARK_UPPER_BOUNDS[stripped]
-        stem = cleaned.replace(".mtx.rnd", "").replace(".rnd", "")
+        stem = cleaned.replace(".mtx.rnd", "").replace(".rnd", "").replace(".mtx", "")
         if stem in BENCHMARK_UPPER_BOUNDS:
             return BENCHMARK_UPPER_BOUNDS[stem]
 

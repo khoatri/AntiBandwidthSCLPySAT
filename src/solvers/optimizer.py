@@ -51,7 +51,9 @@ class ABPOptimizer:
             search steps, and status.
         """
         upper_bound = graph.get_upper_bound()
-        effective_start_w = graph.get_lower_bound() if start_w is None else max(2, start_w)
+        effective_start_w = (
+            max(2, graph.get_lower_bound()) if start_w is None else max(2, start_w)
+        )
 
         if effective_start_w > upper_bound:
             return OptimizationResult(

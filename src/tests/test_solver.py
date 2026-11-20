@@ -233,6 +233,22 @@ def test_solver_non_oom_crash_handling(monkeypatch: pytest.MonkeyPatch) -> None:
     assert res.labeling is None
 
 
+def test_solver_sigkill_oom_handling(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Test when child process is terminated by SIGKILL (exitcode -9) under memory limit
+    import signal
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    solver = ABPSolver()
+
+    def sigkill_worker(*args: Any, **kwargs: Any) -> None:
+        os.kill(os.getpid(), signal.SIGKILL)
+
+    monkeypatch.setattr(solver_module, "_solver_worker", sigkill_worker)
+
+    res = solver.solve(g, w=2, timeout=5.0, mem_limit=30.0)
+    assert res.status == "MEMOUT"
+    assert res.labeling is None
+
+
 def test_solver_sentinel_ready_branch_oom(monkeypatch: pytest.MonkeyPatch) -> None:
     # Test branch where p.sentinel is ready but parent_conn is filtered out, with OOM in stderr
     g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
@@ -347,3 +363,30 @@ def test_solver_result_immutability() -> None:
     )
     with pytest.raises(FrozenInstanceError):
         res.status = "UNSAT"  # type: ignore[misc]
+
+
+def test_solver_deducts_encoding_time_from_isolated_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    solver = ABPSolver()
+
+    captured_kwargs: dict[str, Any] = {}
+
+    def mock_solve_isolated(*args: Any, **kwargs: Any) -> tuple[str, Optional[list[int]], float]:
+        captured_kwargs.update(kwargs)
+        # Model for n=4, w=2 valid labeling: {1: 2, 2: 4, 3: 1, 4: 3} -> positive vars: 2, 8, 9, 15
+        pos = {2, 8, 9, 15}
+        model = [i if i in pos else -i for i in range(1, 17)]
+        return ("SAT", model, 0.01)
+
+    monkeypatch.setattr(solver, "_solve_isolated", mock_solve_isolated)
+
+    res = solver.solve(g, w=2, timeout=5.0)
+    assert res.status == "SAT"
+    assert "timeout" in captured_kwargs
+    passed_timeout = captured_kwargs["timeout"]
+    assert passed_timeout is not None
+    assert passed_timeout < 5.0
+    assert abs(passed_timeout - (5.0 - res.encoding_time)) < 0.05
+

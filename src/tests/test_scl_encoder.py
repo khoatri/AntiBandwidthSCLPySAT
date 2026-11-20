@@ -17,6 +17,11 @@ def test_scl_encoder_parameter_validation() -> None:
 
 def test_scl_encoder_result_structure() -> None:
     g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    encoder_def = SCLEncoder(graph=g, w=2)
+    assert encoder_def.sym_mode == "n"
+    res_def = encoder_def.encode()
+    assert res_def.stats["sym_mode"] == "n"
+
     encoder = SCLEncoder(graph=g, w=2, sym_mode="f")
     res = encoder.encode()
 
@@ -69,3 +74,13 @@ def test_scl_encoder_clause_order_and_literals() -> None:
     if aux_literals:
         assert min(aux_literals) == 17
         assert max(aux_literals) == res.n_vars
+
+
+def test_scl_encoder_in_place_clause_accumulation() -> None:
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    encoder = SCLEncoder(graph=g, w=2, sym_mode="n")
+    res = encoder.encode()
+    assert isinstance(res.cnf, CNF)
+    assert len(res.cnf.clauses) == res.n_clauses
+    assert res.cnf.nv == res.n_vars
+

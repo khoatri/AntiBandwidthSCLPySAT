@@ -193,14 +193,14 @@ The `summary.csv` file is streamed and flushed row-by-row live as each instance 
 | `instance` | Filename of the benchmark graph instance. | `A-pores_1.mtx.rnd` |
 | `n` | Number of vertices $\|V\|$. | `30` |
 | `m` | Number of edges $\|E\|$. | `103` |
-| `lower_bound` | Predefined benchmark lower bound (Sinnl 2018 or fallback 2). | `6` |
+| `lower_bound` | Predefined benchmark lower bound (Sinnl 2018 or fallback 1). | `6` |
 | `upper_bound` | Predefined benchmark upper bound (Sinnl 2018 or theoretical limit). | `8` |
 | `best_known_w` | Best known bandwidth recorded in instance header. | `7` |
 | `optimal_w` | Maximum feasible bandwidth $w^*$ discovered. | `6` |
 | `status` | Search outcome: `OPTIMAL`, `TIMEOUT`, `MEMOUT`, `UNSAT_START`, or `ERROR`. | `OPTIMAL` |
 | `total_time_s` | Cumulative search time in seconds across all steps. | `0.297` |
 | `steps_evaluated` | Number of sequential linear search steps tested. | `3` |
-| `sym_mode` | Symmetry breaking mode used (`n`, `f`, `h`, `l`). | `h` |
+| `sym_mode` | Symmetry breaking mode used (`n`, `f`, `h`, `l`). | `n` |
 | `verified` | Solution certificate verification boolean (`True`/`False`). | `True` |
 
 ---
@@ -235,9 +235,6 @@ Reference lower bounds ($LB$) and upper bounds ($UB$) from Markus Sinnl (2018), 
 | `V-nos6.mtx.rnd` | 675 | 1290 | 326 | 337 | 337 | |
 | `W-685_bus.mtx.rnd` | 685 | 1282 | 136 | 136 | 342 | **Proved optimal in 1 step!** ($LB=UB$) |
 | `X-can__715.mtx.rnd` | 715 | 2975 | 112 | 142 | 357 | |
-| `steps_evaluated` | Number of sequential linear search steps tested. | `3` |
-| `sym_mode` | Symmetry breaking mode used (`n`, `f`, `h`, `l`). | `h` |
-| `verified` | Solution certificate verification boolean (`True`/`False`). | `True` |
 
 ---
 

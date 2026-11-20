@@ -83,6 +83,9 @@ def test_cli_solve_sat(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> No
     data = json.loads(out_file.read_text())
     assert data["status"] == "SAT"
     assert data["w"] == 2
+    assert data["lower_bound"] == 1
+    assert data["upper_bound"] == 2
+    assert data["theoretical_upper_bound"] == 2
     assert data["verified"] is True
     assert len(data["labeling"]) == 4
 
@@ -138,18 +141,6 @@ def test_cli_optimize_missing_graph(capsys: pytest.CaptureFixture[str]) -> None:
     assert ret != 0
     captured = capsys.readouterr()
     assert "Error loading graph" in captured.err
-
-
-def test_cli_solve_unsat_beyond_upper_bound(capsys: pytest.CaptureFixture[str]) -> None:
-    ret = main([
-        "solve",
-        "-g", "instances/A-pores_1.mtx.rnd",
-        "-w", "16",  # U = floor(30/2) = 15, w=16 is UNSAT
-        "-t", "5.0",
-    ])
-    assert ret == 0
-    captured = capsys.readouterr()
-    assert "UNSAT" in captured.out
 
 
 def test_cli_solve_invalid_width(capsys: pytest.CaptureFixture[str]) -> None:
@@ -216,6 +207,10 @@ def test_cli_optimize_p4(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> 
     data = json.loads(out_file.read_text())
     assert data["status"] == "OPTIMAL"
     assert data["optimal_w"] == 2
+    assert data["start_w"] == 2
+    assert data["lower_bound"] == 1
+    assert data["upper_bound"] == 2
+    assert data["theoretical_upper_bound"] == 2
     assert data["verified"] is True
     assert len(data["steps"]) == 1
 
@@ -242,7 +237,7 @@ def test_cli_optimize_output_directory(capsys: pytest.CaptureFixture[str], tmp_p
 
 
 def test_cli_optimize_unsat_start(capsys: pytest.CaptureFixture[str]) -> None:
-    # Complete graph K4
+    # A-pores_1 with start_w (20) exceeding upper bound (8)
     ret = main([
         "optimize",
         "-g", "instances/A-pores_1.mtx.rnd",

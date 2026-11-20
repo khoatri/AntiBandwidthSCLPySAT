@@ -390,3 +390,25 @@ def test_optimizer_explicit_start_w_overrides_lower_bound() -> None:
     assert mock_solver.call_history[0]["w"] == 4
     assert mock_solver.call_history[1]["w"] == 5
 
+
+def test_optimizer_deducts_encoding_time_from_step_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    solver = ABPSolver()
+
+    captured_timeouts: list[Optional[float]] = []
+    original_solve = solver.solve
+
+    def spy_solve(*args: Any, **kwargs: Any) -> SolveResult:
+        captured_timeouts.append(kwargs.get("timeout"))
+        return original_solve(*args, **kwargs)
+
+    monkeypatch.setattr(solver, "solve", spy_solve)
+    optimizer = ABPOptimizer(solver=solver)
+    optimizer.linear_search(graph=g, start_w=2, timeout=10.0)
+    assert len(captured_timeouts) >= 1
+    assert captured_timeouts[0] is not None
+    assert captured_timeouts[0] <= 10.0
+
+

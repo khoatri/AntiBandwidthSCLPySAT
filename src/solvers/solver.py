@@ -117,49 +117,75 @@ class ABPSolver:
         child_conn.close()
         os.close(err_w)  # Close write end in parent
 
-        ready = wait([parent_conn, p.sentinel], timeout=timeout)
-        dur = time.perf_counter() - t0
+        try:
+            ready = wait([parent_conn, p.sentinel], timeout=timeout)
+            dur = time.perf_counter() - t0
 
-        def read_crash_stderr() -> str:
-            try:
-                msg = os.read(err_r, 4096).decode("utf-8", errors="ignore")
-                return msg.strip()
-            except Exception:
-                return ""
-            finally:
-                os.close(err_r)
+            def read_crash_stderr() -> str:
+                try:
+                    msg = os.read(err_r, 4096).decode("utf-8", errors="ignore")
+                    return msg.strip()
+                except Exception:
+                    return ""
+                finally:
+                    try:
+                        os.close(err_r)
+                    except OSError:
+                        pass
 
-        if parent_conn in ready:
-            try:
-                status, model, solve_t = parent_conn.recv()
-                p.join()
-                os.close(err_r)
-                if status == "ERROR":
-                    return ("ERROR", None, solve_t)
-                if status == "MEMOUT":
-                    return ("MEMOUT", None, solve_t)
-                return (status, model, solve_t)
-            except EOFError:
-                # Worker terminated before sending (e.g. killed by OS on OOM abort)
-                p.join()
-                err_msg = read_crash_stderr()
+            def is_oom(err_msg: str) -> bool:
                 if "out-of-memory" in err_msg or "MemoryError" in err_msg:
-                    return ("MEMOUT", None, dur)
-                return ("ERROR", None, dur)
+                    return True
+                if mem_limit_gb is not None and p.exitcode in (-9, 137):
+                    return True
+                return False
 
-        if not ready:
-            # Timeout reached
-            p.kill()
+            if parent_conn in ready:
+                try:
+                    status, model, solve_t = parent_conn.recv()
+                    p.join()
+                    try:
+                        os.close(err_r)
+                    except OSError:
+                        pass
+                    if status == "ERROR":
+                        return ("ERROR", None, solve_t)
+                    if status == "MEMOUT":
+                        return ("MEMOUT", None, solve_t)
+                    return (status, model, solve_t)
+                except EOFError:
+                    # Worker terminated before sending (e.g. killed by OS on OOM abort)
+                    p.join()
+                    err_msg = read_crash_stderr()
+                    if is_oom(err_msg):
+                        return ("MEMOUT", None, dur)
+                    return ("ERROR", None, dur)
+
+            if not ready:
+                # Timeout reached
+                p.kill()
+                p.join()
+                try:
+                    os.close(err_r)
+                except OSError:
+                    pass
+                return ("TIMEOUT", None, timeout if timeout is not None else dur)
+
+            # p.sentinel became ready but parent_conn was not ready (worker died)
             p.join()
-            os.close(err_r)
-            return ("TIMEOUT", None, timeout if timeout is not None else dur)
-
-        # p.sentinel became ready but parent_conn was not ready (worker died)
-        p.join()
-        err_msg = read_crash_stderr()
-        if "out-of-memory" in err_msg or "MemoryError" in err_msg:
-            return ("MEMOUT", None, dur)
-        return ("ERROR", None, dur)
+            err_msg = read_crash_stderr()
+            if is_oom(err_msg):
+                return ("MEMOUT", None, dur)
+            return ("ERROR", None, dur)
+        finally:
+            try:
+                parent_conn.close()
+            except Exception:
+                pass
+            try:
+                os.close(err_r)
+            except OSError:
+                pass
 
     def solve(
         self,
@@ -199,9 +225,13 @@ class ABPSolver:
 
         # 2. Execute SAT solver backend
         if timeout is not None or mem_limit is not None:
+            remaining_step_timeout: Optional[float] = None
+            if timeout is not None:
+                remaining_step_timeout = max(0.001, timeout - encoding_time)
+
             status, model, solve_time = self._solve_isolated(
                 clauses=enc_res.cnf.clauses,
-                timeout=timeout,
+                timeout=remaining_step_timeout,
                 mem_limit_gb=mem_limit,
             )
         else:

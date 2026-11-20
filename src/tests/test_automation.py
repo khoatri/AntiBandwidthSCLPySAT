@@ -53,6 +53,19 @@ def test_automation_empty_directory(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert "No matching instance files found" in captured.out
 
 
+def test_automation_non_existent_directory(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    non_existent = tmp_path / "definitely_does_not_exist_xyz"
+    out_dir = tmp_path / "out"
+
+    parser = build_automation_parser()
+    args = parser.parse_args(["-i", str(non_existent), "-o", str(out_dir)])
+    ret = run_campaign(args)
+    assert ret == 0
+    captured = capsys.readouterr()
+    assert "No matching instance files found" in captured.out
+
+
+
 def test_automation_single_instance_campaign(tmp_path: Path) -> None:
     inst_dir = tmp_path / "instances"
     inst_dir.mkdir()
@@ -166,6 +179,34 @@ def test_automation_duplicate_csv_prevention(tmp_path: Path) -> None:
         rows = list(csv.DictReader(f))
         assert len(rows) == 1
         assert rows[0]["instance"] == "A-inst.mtx.rnd"
+
+
+def test_automation_rerun_updates_existing_csv_row(tmp_path: Path) -> None:
+    inst_dir = tmp_path / "instances"
+    out_dir = tmp_path / "benchmarks"
+    inst_dir.mkdir()
+    (inst_dir / "A-inst.mtx.rnd").write_text("Nombre: A\n4 2 3\n1 2\n2 3\n3 4\n")
+
+    parser = build_automation_parser()
+
+    # First run with -s n
+    args1 = parser.parse_args(["-i", str(inst_dir), "-o", str(out_dir), "-s", "n"])
+    assert run_campaign(args1) == 0
+
+    summary_file = out_dir / "summary.csv"
+    with open(summary_file, mode="r", newline="") as f:
+        rows = list(csv.DictReader(f))
+        assert len(rows) == 1
+        assert rows[0]["sym_mode"] == "n"
+
+    # Second run without --skip-existing with -s f
+    args2 = parser.parse_args(["-i", str(inst_dir), "-o", str(out_dir), "-s", "f"])
+    assert run_campaign(args2) == 0
+
+    with open(summary_file, mode="r", newline="") as f:
+        rows = list(csv.DictReader(f))
+        assert len(rows) == 1, "Must not append duplicate rows"
+        assert rows[0]["sym_mode"] == "f", "Must update existing row with latest run result"
 
 
 def test_automation_corrupt_instance_continues(tmp_path: Path) -> None:

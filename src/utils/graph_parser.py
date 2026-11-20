@@ -18,7 +18,7 @@ def parse_instance(file_path: Union[str, Path]) -> Graph:
     if not path.is_file():
         raise FileNotFoundError(f"Instance file not found: {path}")
 
-    name = path.stem
+    name = path.name
     n: int | None = None
     best_known_w: int | None = None
     expected_m: int | None = None
