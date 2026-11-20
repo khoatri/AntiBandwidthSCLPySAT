@@ -1,6 +1,6 @@
 # SCL Encoding for the Anti-Bandwidth Problem
 
-This document specifies the SCL encoding (Sequential Counter encoding for Ladder constraints) for the Anti-Bandwidth Problem (ABP) and its SAT implementation in PySAT.
+This document specifies the SCL (Sequential Counter for Ladder constraints) encoding for the Anti-Bandwidth Problem (ABP) and its SAT implementation in PySAT.
 
 ---
 
