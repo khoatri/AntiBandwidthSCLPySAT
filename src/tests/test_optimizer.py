@@ -171,7 +171,7 @@ def test_optimizer_timeout_halt() -> None:
     g = parse_instance("instances/A-pores_1.mtx.rnd")
     optimizer = ABPOptimizer()
 
-    res = optimizer.linear_search(g, start_w=10, timeout=0.005)
+    res = optimizer.linear_search(g, start_w=6, timeout=0.005)
     assert res.status == "TIMEOUT"
     assert len(res.steps) == 1
     assert res.steps[0].status == "TIMEOUT"
@@ -330,3 +330,63 @@ def test_optimizer_result_immutability() -> None:
     )
     with pytest.raises(FrozenInstanceError):
         res.optimal_w = 3  # type: ignore[misc]
+
+
+def test_optimizer_defaults_to_graph_lower_bound() -> None:
+    # Graph with recognized name should start at lower bound 6 and search up to upper bound 8
+    g = Graph(n=30, edges=((1, 2), (2, 3)), name="A-pores_1.mtx.rnd")
+    mock_solver = MockSolver([
+        _make_result("SAT", w=6),
+        _make_result("SAT", w=7),
+        _make_result("SAT", w=8),
+    ])
+    optimizer = ABPOptimizer(solver=mock_solver)
+    res = optimizer.linear_search(g)  # start_w omitted
+
+    assert res.status == "OPTIMAL"
+    assert res.optimal_w == 8
+    assert res.upper_bound == 8
+    assert [c["w"] for c in mock_solver.call_history] == [6, 7, 8]
+
+
+def test_optimizer_proves_optimality_in_one_step_when_lb_equals_ub() -> None:
+    # B-ibm32 has LB=9, UB=9. A single SAT call at w=9 proves optimality!
+    g = Graph(n=32, edges=((1, 2), (2, 3)), name="B-ibm32.mtx.rnd")
+    mock_solver = MockSolver([
+        _make_result("SAT", w=9),
+    ])
+    optimizer = ABPOptimizer(solver=mock_solver)
+    res = optimizer.linear_search(g)
+
+    assert res.status == "OPTIMAL"
+    assert res.optimal_w == 9
+    assert res.upper_bound == 9
+    assert len(mock_solver.call_history) == 1
+    assert mock_solver.call_history[0]["w"] == 9
+
+
+def test_optimizer_defaults_to_2_on_custom_graph() -> None:
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)), name="custom_p4")
+    mock_solver = MockSolver([
+        _make_result("SAT", w=2),
+    ])
+    optimizer = ABPOptimizer(solver=mock_solver)
+    res = optimizer.linear_search(g)  # start_w omitted
+
+    assert len(mock_solver.call_history) == 1
+    assert mock_solver.call_history[0]["w"] == 2
+
+
+def test_optimizer_explicit_start_w_overrides_lower_bound() -> None:
+    g = Graph(n=30, edges=((1, 2), (2, 3)), name="A-pores_1.mtx.rnd")
+    mock_solver = MockSolver([
+        _make_result("SAT", w=4),
+        _make_result("UNSAT", w=5),
+    ])
+    optimizer = ABPOptimizer(solver=mock_solver)
+    res = optimizer.linear_search(g, start_w=4)
+
+    assert res.optimal_w == 4
+    assert mock_solver.call_history[0]["w"] == 4
+    assert mock_solver.call_history[1]["w"] == 5
+

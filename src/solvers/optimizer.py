@@ -32,7 +32,7 @@ class ABPOptimizer:
     def linear_search(
         self,
         graph: Graph,
-        start_w: int = 2,
+        start_w: Optional[int] = None,
         sym_mode: str = "n",
         timeout: Optional[float] = None,
         mem_limit: Optional[float] = None,
@@ -41,7 +41,7 @@ class ABPOptimizer:
 
         Args:
             graph: The input Graph.
-            start_w: Starting threshold (default: 2).
+            start_w: Starting threshold (default: None, resolves to graph.get_lower_bound()).
             sym_mode: Symmetry breaking mode ('n', 'f', 'h', 'l').
             timeout: Total maximum time in seconds for the entire optimization search.
             mem_limit: Memory limit in GB per decision step.
@@ -51,8 +51,9 @@ class ABPOptimizer:
             search steps, and status.
         """
         upper_bound = graph.get_upper_bound()
+        effective_start_w = graph.get_lower_bound() if start_w is None else max(2, start_w)
 
-        if start_w > upper_bound:
+        if effective_start_w > upper_bound:
             return OptimizationResult(
                 optimal_w=None,
                 optimal_labeling=None,
@@ -71,7 +72,7 @@ class ABPOptimizer:
 
         t_start = time.perf_counter()
 
-        for w in range(start_w, upper_bound + 1):
+        for w in range(effective_start_w, upper_bound + 1):
             remaining_timeout: Optional[float] = None
             if timeout is not None:
                 elapsed = time.perf_counter() - t_start
@@ -92,7 +93,7 @@ class ABPOptimizer:
             steps.append(step_res)
 
             if step_res.status == "UNSAT":
-                if w == start_w:
+                if w == effective_start_w:
                     status = "UNSAT_START"
                     optimal_w = None
                     optimal_labeling = None
@@ -106,8 +107,8 @@ class ABPOptimizer:
                 best_w = w
                 best_labeling = step_res.labeling
                 if w == upper_bound:
-                    # For graphs without isolated vertices, U = floor(n / 2) is the
-                    # maximum possible bandwidth. Finding SAT at U proves optimality.
+                    # Reached the proven upper bound (benchmark or theoretical limit).
+                    # Finding SAT at upper_bound proves optimality.
                     status = "OPTIMAL"
                     optimal_w = upper_bound
                     optimal_labeling = best_labeling

@@ -188,12 +188,45 @@ $$\neg A_{s, \ell} \qquad \left(\lceil n/2 \rceil < \ell \le n\right)$$
   3. For every edge $\{u, v\} \in E$, $|\phi(u) - \phi(v)| \ge w$.
 
 ### Optimization & Search Bounds
-- **Linear Search**: Start at a known feasible lower bound (e.g. $w = 2$) and increment $w$ by 1 until the first `UNSAT` result, using a fresh solver instance for each width.
-- **Feasible Bounds**: Optimum is at most $n - 1$ since $E \ne \varnothing$; width $w = n$ is always `UNSAT`.
-- **Upper Bound Without Isolated Vertices**: If minimum degree $\delta(G) \ge 1$:
-  $$\beta(\phi) \le \lfloor n/2 \rfloor$$
-  Hence, search limit $U = \lfloor n/2 \rfloor + 1$ is guaranteed `UNSAT`.
-- **Graphs with Isolated Vertices**: Use $n - 1$ as valid upper limit.
+- **Incremental Linear Search**: Evaluates sequential decision problems $w = start\_w, start\_w + 1, \dots$ until the first `UNSAT` result or early termination at the upper bound $UB$, using a fresh solver instance for each width.
+- **Predefined Lower Bounds ($LB$)**: By default, linear search starts at the published benchmark lower bound $LB$ (from Sinnl 2018) if recognized, or $w = 2$ for custom graphs.
+- **Upper Bounds ($UB$)**:
+  - **Benchmark Upper Bound**: If recognized from the benchmark table, $UB$ is set to the published upper bound from Sinnl (2018).
+  - **Theoretical Upper Bound (Without Isolated Vertices)**: If minimum degree $\delta(G) \ge 1$, any bijection satisfies $\beta(\phi) \le \lfloor n/2 \rfloor$. Hence, $U_{\text{theo}} = \lfloor n/2 \rfloor$.
+  - **Graphs with Isolated Vertices**: Use $n - 1$ as the theoretical bound.
+- **Search Pruning & 1-Step Optimality**:
+  - Bounding the search ceiling to $UB$ avoids redundant SAT solver calls for $w > UB$ (e.g., stopping at $w = 72$ instead of $210$ for `M-bcsstk06`).
+  - Finding `SAT` at $w = UB$ proves optimality immediately.
+  - When $LB = UB$ (e.g., `B-ibm32`, `H-impcol_b`, `L-bcspwr03`, `W-685_bus`), finding `SAT` on the initial step at $w = LB$ proves optimality in **1 decision step**.
+
+#### Benchmark Predefined Bounds (Sinnl, 2018)
+
+| Instance | $n$ | $m$ | Lower Bound (LB) | Upper Bound (UB) | Theoretical $\lfloor n/2 \rfloor$ | Notes |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `A-pores_1.mtx.rnd` | 30 | 103 | 6 | 8 | 15 | |
+| `B-ibm32.mtx.rnd` | 32 | 90 | 9 | 9 | 16 | **Proved optimal in 1 step!** ($LB=UB$) |
+| `C-bcspwr01.mtx.rnd` | 39 | 46 | 16 | 17 | 19 | |
+| `D-bcsstk01.mtx.rnd` | 48 | 176 | 8 | 9 | 24 | |
+| `E-bcspwr02.mtx.rnd` | 49 | 59 | 21 | 22 | 24 | |
+| `F-curtis54.mtx.rnd` | 54 | 124 | 12 | 13 | 27 | |
+| `G-will57.mtx.rnd` | 57 | 127 | 12 | 14 | 28 | |
+| `H-impcol_b.mtx.rnd` | 59 | 281 | 8 | 8 | 29 | **Proved optimal in 1 step!** ($LB=UB$) |
+| `I-ash85.mtx.rnd` | 85 | 219 | 19 | 27 | 42 | |
+| `J-nos4.mtx.rnd` | 100 | 247 | 32 | 40 | 50 | |
+| `K-dwt__234.mtx.rnd` | 117 | 162 | 46 | 58 | 58 | |
+| `L-bcspwr03.mtx.rnd` | 118 | 179 | 39 | 39 | 59 | **Proved optimal in 1 step!** ($LB=UB$) |
+| `M-bcsstk06.mtx.rnd` | 420 | 3720 | 28 | 72 | 210 | Search pruned to 72 (vs 210) |
+| `N-bcsstk07.mtx.rnd` | 420 | 3720 | 28 | 72 | 210 | Search pruned to 72 (vs 210) |
+| `O-impcol_d.mtx.rnd` | 425 | 1267 | 91 | 173 | 212 | |
+| `P-can__445.mtx.rnd` | 445 | 1682 | 78 | 120 | 222 | |
+| `Q-494_bus.mtx.rnd` | 494 | 586 | 219 | 246 | 247 | |
+| `R-dwt__503.mtx.rnd` | 503 | 2762 | 46 | 71 | 251 | |
+| `S-sherman4.mtx.rnd` | 546 | 1341 | 256 | 272 | 273 | |
+| `T-dwt__592.mtx.rnd` | 592 | 2256 | 103 | 150 | 296 | |
+| `U-662_bus.mtx.rnd` | 662 | 906 | 219 | 220 | 331 | |
+| `V-nos6.mtx.rnd` | 675 | 1290 | 326 | 337 | 337 | |
+| `W-685_bus.mtx.rnd` | 685 | 1282 | 136 | 136 | 342 | **Proved optimal in 1 step!** ($LB=UB$) |
+| `X-can__715.mtx.rnd` | 715 | 2975 | 112 | 142 | 357 | |
 
 ---
 

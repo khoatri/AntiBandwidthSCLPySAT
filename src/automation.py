@@ -21,6 +21,8 @@ CSV_COLUMNS = [
     "instance",
     "n",
     "m",
+    "lower_bound",
+    "upper_bound",
     "best_known_w",
     "optimal_w",
     "status",
@@ -74,9 +76,9 @@ def build_automation_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--start-w-mode",
-        choices=["default", "best_known"],
-        default="default",
-        help="Starting lower bound mode: 'default' starts at 2, 'best_known' starts at best_known_w from header (default: default)",
+        choices=["lower_bound", "min", "header", "default", "best_known"],
+        default="lower_bound",
+        help="Starting lower bound mode: 'lower_bound' (default, uses Sinnl benchmark LB or 2), 'min' (starts at 2), 'header' (uses best_known_w from instance header)",
     )
     parser.add_argument(
         "-q", "--quiet",
@@ -106,9 +108,14 @@ def _process_instance(
     """Run optimization search for a single instance and save JSON log."""
     graph = parse_instance(str(inst_path))
 
-    start_w = 2
-    if start_w_mode == "best_known" and graph.best_known_w is not None:
+    if start_w_mode in ("lower_bound", "default"):
+        start_w = graph.get_lower_bound()
+    elif start_w_mode in ("header", "best_known") and graph.best_known_w is not None:
         start_w = max(2, graph.best_known_w)
+    elif start_w_mode == "min":
+        start_w = 2
+    else:
+        start_w = graph.get_lower_bound()
 
     optimizer = ABPOptimizer()
     res = optimizer.linear_search(
@@ -145,10 +152,12 @@ def _process_instance(
         "problem_name": graph.name or inst_path.name,
         "n": graph.n,
         "m": graph.m,
+        "lower_bound": graph.get_lower_bound(),
+        "upper_bound": res.upper_bound,
+        "theoretical_upper_bound": graph.get_theoretical_upper_bound(),
         "best_known_w": graph.best_known_w,
         "start_w": start_w,
         "sym_mode": sym_mode,
-        "upper_bound": res.upper_bound,
         "optimal_w": res.optimal_w,
         "status": res.status,
         "total_time": round(res.total_time, 4),
@@ -167,6 +176,8 @@ def _process_instance(
         "instance": inst_path.name,
         "n": str(graph.n),
         "m": str(graph.m),
+        "lower_bound": str(graph.get_lower_bound()),
+        "upper_bound": str(res.upper_bound),
         "best_known_w": str(graph.best_known_w) if graph.best_known_w is not None else "",
         "optimal_w": str(res.optimal_w) if res.optimal_w is not None else "",
         "status": res.status,
@@ -266,8 +277,14 @@ def run_campaign(args: argparse.Namespace) -> int:
 
             if not args.quiet:
                 w_str = row["optimal_w"] if row["optimal_w"] else "None"
+                bounds_str = (
+                    f"[{row['lower_bound']}..{row['upper_bound']}]"
+                    if row.get("lower_bound") and row.get("upper_bound")
+                    else ""
+                )
                 print(
                     f"[{idx}/{total}] {inst_path.name:<25} "
+                    f"bounds={bounds_str:<10} "
                     f"w*={w_str:<4} status={row['status']:<10} "
                     f"time={row['total_time_s']:<8}s verified={row['verified']}"
                 )

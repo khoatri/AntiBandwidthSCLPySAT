@@ -1,7 +1,84 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
+
+
+RAW_BENCHMARK_LOWER_BOUNDS: dict[str, int] = {
+    "A-pores_1.mtx.rnd": 6,
+    "B-ibm32.mtx.rnd": 9,
+    "C-bcspwr01.mtx.rnd": 16,
+    "D-bcsstk01.mtx.rnd": 8,
+    "E-bcspwr02.mtx.rnd": 21,
+    "F-curtis54.mtx.rnd": 12,
+    "G-will57.mtx.rnd": 12,
+    "H-impcol_b.mtx.rnd": 8,
+    "I-ash85.mtx.rnd": 19,
+    "J-nos4.mtx.rnd": 32,
+    "K-dwt__234.mtx.rnd": 46,
+    "L-bcspwr03.mtx.rnd": 39,
+    "M-bcsstk06.mtx.rnd": 28,
+    "N-bcsstk07.mtx.rnd": 28,
+    "O-impcol_d.mtx.rnd": 91,
+    "P-can__445.mtx.rnd": 78,
+    "Q-494_bus.mtx.rnd": 219,
+    "R-dwt__503.mtx.rnd": 46,
+    "S-sherman4.mtx.rnd": 256,
+    "T-dwt__592.mtx.rnd": 103,
+    "U-662_bus.mtx.rnd": 219,
+    "V-nos6.mtx.rnd": 326,
+    "W-685_bus.mtx.rnd": 136,
+    "X-can__715.mtx.rnd": 112,
+}
+
+RAW_BENCHMARK_UPPER_BOUNDS: dict[str, int] = {
+    "A-pores_1.mtx.rnd": 8,
+    "B-ibm32.mtx.rnd": 9,
+    "C-bcspwr01.mtx.rnd": 17,
+    "D-bcsstk01.mtx.rnd": 9,
+    "E-bcspwr02.mtx.rnd": 22,
+    "F-curtis54.mtx.rnd": 13,
+    "G-will57.mtx.rnd": 14,
+    "H-impcol_b.mtx.rnd": 8,
+    "I-ash85.mtx.rnd": 27,
+    "J-nos4.mtx.rnd": 40,
+    "K-dwt__234.mtx.rnd": 58,
+    "L-bcspwr03.mtx.rnd": 39,
+    "M-bcsstk06.mtx.rnd": 72,
+    "N-bcsstk07.mtx.rnd": 72,
+    "O-impcol_d.mtx.rnd": 173,
+    "P-can__445.mtx.rnd": 120,
+    "Q-494_bus.mtx.rnd": 246,
+    "R-dwt__503.mtx.rnd": 71,
+    "S-sherman4.mtx.rnd": 272,
+    "T-dwt__592.mtx.rnd": 150,
+    "U-662_bus.mtx.rnd": 220,
+    "V-nos6.mtx.rnd": 337,
+    "W-685_bus.mtx.rnd": 136,
+    "X-can__715.mtx.rnd": 142,
+}
+
+
+def _build_normalized_bound_map(raw_map: dict[str, int]) -> dict[str, int]:
+    normalized: dict[str, int] = {}
+    for raw_name, val in raw_map.items():
+        normalized[raw_name] = val
+        stripped = (
+            raw_name[2:]
+            if (len(raw_name) >= 2 and raw_name[0].isalpha() and raw_name[1] == "-")
+            else raw_name
+        )
+        normalized[stripped] = val
+        stem_raw = raw_name.replace(".mtx.rnd", "").replace(".rnd", "")
+        stem_stripped = stripped.replace(".mtx.rnd", "").replace(".rnd", "")
+        normalized[stem_raw] = val
+        normalized[stem_stripped] = val
+    return normalized
+
+
+BENCHMARK_LOWER_BOUNDS: dict[str, int] = _build_normalized_bound_map(RAW_BENCHMARK_LOWER_BOUNDS)
+BENCHMARK_UPPER_BOUNDS: dict[str, int] = _build_normalized_bound_map(RAW_BENCHMARK_UPPER_BOUNDS)
 
 
 @dataclass(frozen=True)
@@ -68,16 +145,56 @@ class Graph:
         """True if there is at least one vertex with degree 0."""
         return self.min_degree == 0
 
-    def get_upper_bound(self) -> int:
-        """Upper search bound for antibandwidth w.
+    def get_lower_bound(self, fallback: int = 2) -> int:
+        """Returns the predefined benchmark lower bound if known, else clamped fallback (>= 2)."""
+        cleaned = self.name.strip()
+        if "/" in cleaned or "\\" in cleaned:
+            cleaned = Path(cleaned).name
+        if cleaned in BENCHMARK_LOWER_BOUNDS:
+            return max(2, BENCHMARK_LOWER_BOUNDS[cleaned])
+        stripped = (
+            cleaned[2:]
+            if (len(cleaned) >= 2 and cleaned[0].isalpha() and cleaned[1] == "-")
+            else cleaned
+        )
+        if stripped in BENCHMARK_LOWER_BOUNDS:
+            return max(2, BENCHMARK_LOWER_BOUNDS[stripped])
+        stem = cleaned.replace(".mtx.rnd", "").replace(".rnd", "")
+        if stem in BENCHMARK_LOWER_BOUNDS:
+            return max(2, BENCHMARK_LOWER_BOUNDS[stem])
+        return max(2, fallback)
 
-        If G has no isolated vertices, any labeling satisfies
-        beta(phi) <= floor(n / 2), so floor(n / 2) + 1 is guaranteed UNSAT.
-        If isolated vertices exist, the upper bound is n - 1.
-        """
+    def get_theoretical_upper_bound(self) -> int:
+        """Theoretical upper bound based on graph topology (no isolated vertices: floor(n/2), else n-1)."""
         if not self.has_isolated_vertices():
             return self.n // 2
         return self.n - 1
+
+    def get_upper_bound(self, fallback: Optional[int] = None) -> int:
+        """Upper search bound for antibandwidth w.
+
+        Returns published benchmark upper bound if recognized, else fallback (if provided)
+        or theoretical upper bound floor(n / 2) (or n - 1 if isolated vertices exist).
+        """
+        cleaned = self.name.strip()
+        if "/" in cleaned or "\\" in cleaned:
+            cleaned = Path(cleaned).name
+        if cleaned in BENCHMARK_UPPER_BOUNDS:
+            return BENCHMARK_UPPER_BOUNDS[cleaned]
+        stripped = (
+            cleaned[2:]
+            if (len(cleaned) >= 2 and cleaned[0].isalpha() and cleaned[1] == "-")
+            else cleaned
+        )
+        if stripped in BENCHMARK_UPPER_BOUNDS:
+            return BENCHMARK_UPPER_BOUNDS[stripped]
+        stem = cleaned.replace(".mtx.rnd", "").replace(".rnd", "")
+        if stem in BENCHMARK_UPPER_BOUNDS:
+            return BENCHMARK_UPPER_BOUNDS[stem]
+
+        if fallback is not None:
+            return fallback
+        return self.get_theoretical_upper_bound()
 
     def get_symmetry_vertex(self, mode: str) -> Optional[int]:
         """Returns the vertex index s for symmetry breaking mode.

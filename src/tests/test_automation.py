@@ -17,7 +17,7 @@ def test_automation_parser_defaults() -> None:
     assert args.timeout == 1800.0
     assert args.mem_limit == 30.0
     assert args.skip_existing is False
-    assert args.start_w_mode == "default"
+    assert args.start_w_mode == "lower_bound"
 
 
 def test_automation_custom_args() -> None:
@@ -252,3 +252,63 @@ def test_automation_cli_script_invocation(tmp_path: Path) -> None:
     assert proc.returncode == 0
     assert (out_dir / "summary.csv").exists()
     assert (out_dir / "campaign_manifest.json").exists()
+
+
+def test_automation_starts_from_lower_bound_and_records_bounds(tmp_path: Path) -> None:
+    inst_dir = tmp_path / "instances"
+    out_dir = tmp_path / "benchmarks"
+    inst_dir.mkdir()
+
+    # Named A-pores_1.mtx.rnd with Sinnl LB = 6, UB = 8
+    (inst_dir / "A-pores_1.mtx.rnd").write_text(
+        Path("instances/A-pores_1.mtx.rnd").read_text()
+    )
+
+    parser = build_automation_parser()
+    args = parser.parse_args([
+        "-i", str(inst_dir),
+        "-o", str(out_dir),
+        "-t", "5.0",
+    ])
+    assert run_campaign(args) == 0
+
+    res_file = out_dir / "results" / "A-pores_1.mtx.rnd.json"
+    assert res_file.exists()
+    data = json.loads(res_file.read_text())
+    assert data["start_w"] == 6
+    assert data["lower_bound"] == 6
+    assert data["upper_bound"] == 8
+    assert data["theoretical_upper_bound"] == 15
+
+    # Check summary CSV columns
+    summary_file = out_dir / "summary.csv"
+    assert summary_file.exists()
+    with open(summary_file, mode="r", newline="") as f:
+        rows = list(csv.DictReader(f))
+        assert len(rows) == 1
+        r = rows[0]
+        assert r["lower_bound"] == "6"
+        assert r["upper_bound"] == "8"
+
+
+def test_automation_explicit_start_w_modes(tmp_path: Path) -> None:
+    inst_dir = tmp_path / "instances"
+    out_dir = tmp_path / "benchmarks"
+    inst_dir.mkdir()
+    (inst_dir / "A-pores_1.mtx.rnd").write_text(
+        Path("instances/A-pores_1.mtx.rnd").read_text()
+    )
+    parser = build_automation_parser()
+
+    # Mode 'min' starts at 2
+    args_min = parser.parse_args(["-i", str(inst_dir), "-o", str(out_dir / "min"), "--start-w-mode", "min", "-t", "5.0"])
+    assert run_campaign(args_min) == 0
+    data_min = json.loads((out_dir / "min" / "results" / "A-pores_1.mtx.rnd.json").read_text())
+    assert data_min["start_w"] == 2
+
+    # Mode 'header' starts at header's 7
+    args_header = parser.parse_args(["-i", str(inst_dir), "-o", str(out_dir / "header"), "--start-w-mode", "header", "-t", "5.0"])
+    assert run_campaign(args_header) == 0
+    data_header = json.loads((out_dir / "header" / "results" / "A-pores_1.mtx.rnd.json").read_text())
+    assert data_header["start_w"] == 7
+

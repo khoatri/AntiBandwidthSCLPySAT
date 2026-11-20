@@ -87,21 +87,21 @@ The main CLI is accessible via `python -m src.cli [subcommand] [options]`.
 
 #### 1.1. `inspect` Subcommand
 
-Profiles graph properties and calculates exact theoretical SCL formula dimensions ($N$ variables, $C$ clauses) in $< 1\text{ ms}$ without invoking the SAT solver.
+Profiles graph properties and calculates exact theoretical SCL formula dimensions ($N$ variables, $C$ clauses) in $< 1\text{ ms}$ without invoking the SAT solver. Displays published benchmark Lower Bound (LB) and Upper Bound (UB) alongside the theoretical bound $\lfloor n/2 \rfloor$.
 
 **Arguments:**
 
 | Flag | Long Option | Type | Default | Description |
 | :--- | :--- | :---: | :---: | :--- |
 | `-g` | `--graph` | `str` | *required* | Path to input graph instance file (`*.mtx.rnd`). |
-| `-w` | `--width` | `int` | `2` | Target bandwidth threshold $w$ for theoretical formula sizing ($2 \le w \le n$). |
+| `-w` | `--width` | `int` | `None` | Target bandwidth threshold $w$ for theoretical formula sizing ($2 \le w \le n$). Defaults to the graph's predefined lower bound (or `2`). |
 | `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (half/max-degree), `l` (lowest-degree). |
 | `-h` | `--help` | | | Show help message and exit. |
 
 **Example:**
 
 ```bash
-python -m src.cli inspect -g instances/A-pores_1.mtx.rnd -w 6 -s h
+python -m src.cli inspect -g instances/A-pores_1.mtx.rnd -s h
 ```
 
 ---
@@ -115,7 +115,7 @@ Solves a single decision problem instance: **Is $\operatorname{AB}(G) \ge w$?** 
 | Flag | Long Option | Type | Default | Description |
 | :--- | :--- | :---: | :---: | :--- |
 | `-g` | `--graph` | `str` | *required* | Path to input graph instance file (`*.mtx.rnd`). |
-| `-w` | `--width` | `int` | *required* | Target bandwidth threshold $w$ ($2 \le w \le n$). |
+| `-w` | `--width` | `int` | `None` | Target bandwidth threshold $w$ ($2 \le w \le n$). Defaults to the graph's predefined lower bound (or `2`). |
 | `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n`, `f`, `h`, or `l`. |
 | `-t` | `--timeout` | `float` | `None` | Maximum solve time limit in seconds. |
 | `-m` | `--mem-limit` | `float` | `None` | Maximum memory limit in **GB** per solve step (e.g. `30.0`). |
@@ -126,21 +126,21 @@ Solves a single decision problem instance: **Is $\operatorname{AB}(G) \ge w$?** 
 **Example:**
 
 ```bash
-python -m src.cli solve -g instances/A-pores_1.mtx.rnd -w 6 -s h -t 30.0 -m 30.0 -o /tmp/
+python -m src.cli solve -g instances/A-pores_1.mtx.rnd -s h -t 30.0 -m 30.0 -o /tmp/
 ```
 
 ---
 
 #### 1.3. `optimize` Subcommand
 
-Finds the optimal anti-bandwidth $w^*$ via incremental linear search ($w = start\_w, start\_w + 1, \dots$), terminating at the first `UNSAT` result or early exiting at the theoretical upper bound $U = \lfloor n/2 \rfloor$. Enforces total cumulative instance timeout across search steps.
+Finds the optimal anti-bandwidth $w^*$ via incremental linear search ($w = start\_w, start\_w + 1, \dots$), terminating at the first `UNSAT` result or early exiting at the upper bound $U$ (from the published benchmark upper bound table if recognized, or theoretical bound $\lfloor n/2 \rfloor$). For instances where $LB = UB$, finding `SAT` at $w = LB$ immediately proves optimality in **1 decision step**. Enforces total cumulative instance timeout across search steps.
 
 **Arguments:**
 
 | Flag | Long Option | Type | Default | Description |
 | :--- | :--- | :---: | :---: | :--- |
 | `-g` | `--graph` | `str` | *required* | Path to input graph instance file (`*.mtx.rnd`). |
-| | `--start-w` | `int` | `2` | Starting lower bound for search ($\ge 2$). |
+| | `--start-w` | `int` | `None` | Starting lower bound for search ($\ge 2$). Defaults to the graph's predefined lower bound (or `2`). |
 | `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n`, `f`, `h`, or `l`. |
 | `-t` | `--timeout` | `float` | `None` | Total maximum time in seconds for the entire optimization search. |
 | `-m` | `--mem-limit` | `float` | `None` | Maximum memory limit in **GB** per decision step (e.g. `30.0`). |
@@ -151,7 +151,7 @@ Finds the optimal anti-bandwidth $w^*$ via incremental linear search ($w = start
 **Example:**
 
 ```bash
-python -m src.cli optimize -g instances/A-pores_1.mtx.rnd --start-w 4 -s h -t 300.0 -m 30.0 -o benchmarks/results/
+python -m src.cli optimize -g instances/A-pores_1.mtx.rnd -s h -t 300.0 -m 30.0 -o benchmarks/results/
 ```
 
 ---
@@ -174,7 +174,7 @@ python -m src.automation [options]
 | `-t` | `--timeout` | `float` | `1800.0` | Total timeout in seconds per instance for linear search. |
 | `-m` | `--mem-limit` | `float` | `30.0` | Maximum memory limit in **GB** per decision step. |
 | | `--skip-existing` | `flag` | `False` | Skip instances that already have completed JSON output in `output_dir/results`. |
-| | `--start-w-mode` | `choice` | `default` | Starting lower bound mode: `'default'` (starts at 2) or `'best_known'` (starts at header's `best_known_w`). |
+| | `--start-w-mode` | `choice` | `lower_bound` | Starting lower bound mode: `'lower_bound'` (default, uses Sinnl benchmark LB or 2), `'min'` (starts at 2), or `'header'` (starts at header's `best_known_w`). |
 | `-q` | `--quiet` | `flag` | `False` | Suppress per-instance console progress logs. |
 | `-h` | `--help` | | | Show help message and exit. |
 
@@ -193,10 +193,48 @@ The `summary.csv` file is streamed and flushed row-by-row live as each instance 
 | `instance` | Filename of the benchmark graph instance. | `A-pores_1.mtx.rnd` |
 | `n` | Number of vertices $\|V\|$. | `30` |
 | `m` | Number of edges $\|E\|$. | `103` |
+| `lower_bound` | Predefined benchmark lower bound (Sinnl 2018 or fallback 2). | `6` |
+| `upper_bound` | Predefined benchmark upper bound (Sinnl 2018 or theoretical limit). | `8` |
 | `best_known_w` | Best known bandwidth recorded in instance header. | `7` |
 | `optimal_w` | Maximum feasible bandwidth $w^*$ discovered. | `6` |
 | `status` | Search outcome: `OPTIMAL`, `TIMEOUT`, `MEMOUT`, `UNSAT_START`, or `ERROR`. | `OPTIMAL` |
 | `total_time_s` | Cumulative search time in seconds across all steps. | `0.297` |
+| `steps_evaluated` | Number of sequential linear search steps tested. | `3` |
+| `sym_mode` | Symmetry breaking mode used (`n`, `f`, `h`, `l`). | `h` |
+| `verified` | Solution certificate verification boolean (`True`/`False`). | `True` |
+
+---
+
+### 2.1 Benchmark Predefined Bounds (Sinnl, 2018)
+
+Reference lower bounds ($LB$) and upper bounds ($UB$) from Markus Sinnl (2018), *A note on computational approaches for the antibandwidth problem*:
+
+| Instance | $n$ | $m$ | Lower Bound (LB) | Upper Bound (UB) | Theoretical $\lfloor n/2 \rfloor$ | Notes |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `A-pores_1.mtx.rnd` | 30 | 103 | 6 | 8 | 15 | |
+| `B-ibm32.mtx.rnd` | 32 | 90 | 9 | 9 | 16 | **Proved optimal in 1 step!** ($LB=UB$) |
+| `C-bcspwr01.mtx.rnd` | 39 | 46 | 16 | 17 | 19 | |
+| `D-bcsstk01.mtx.rnd` | 48 | 176 | 8 | 9 | 24 | |
+| `E-bcspwr02.mtx.rnd` | 49 | 59 | 21 | 22 | 24 | |
+| `F-curtis54.mtx.rnd` | 54 | 124 | 12 | 13 | 27 | |
+| `G-will57.mtx.rnd` | 57 | 127 | 12 | 14 | 28 | |
+| `H-impcol_b.mtx.rnd` | 59 | 281 | 8 | 8 | 29 | **Proved optimal in 1 step!** ($LB=UB$) |
+| `I-ash85.mtx.rnd` | 85 | 219 | 19 | 27 | 42 | |
+| `J-nos4.mtx.rnd` | 100 | 247 | 32 | 40 | 50 | |
+| `K-dwt__234.mtx.rnd` | 117 | 162 | 46 | 58 | 58 | |
+| `L-bcspwr03.mtx.rnd` | 118 | 179 | 39 | 39 | 59 | **Proved optimal in 1 step!** ($LB=UB$) |
+| `M-bcsstk06.mtx.rnd` | 420 | 3720 | 28 | 72 | 210 | Search pruned to 72 (vs 210) |
+| `N-bcsstk07.mtx.rnd` | 420 | 3720 | 28 | 72 | 210 | Search pruned to 72 (vs 210) |
+| `O-impcol_d.mtx.rnd` | 425 | 1267 | 91 | 173 | 212 | |
+| `P-can__445.mtx.rnd` | 445 | 1682 | 78 | 120 | 222 | |
+| `Q-494_bus.mtx.rnd` | 494 | 586 | 219 | 246 | 247 | |
+| `R-dwt__503.mtx.rnd` | 503 | 2762 | 46 | 71 | 251 | |
+| `S-sherman4.mtx.rnd` | 546 | 1341 | 256 | 272 | 273 | |
+| `T-dwt__592.mtx.rnd` | 592 | 2256 | 103 | 150 | 296 | |
+| `U-662_bus.mtx.rnd` | 662 | 906 | 219 | 220 | 331 | |
+| `V-nos6.mtx.rnd` | 675 | 1290 | 326 | 337 | 337 | |
+| `W-685_bus.mtx.rnd` | 685 | 1282 | 136 | 136 | 342 | **Proved optimal in 1 step!** ($LB=UB$) |
+| `X-can__715.mtx.rnd` | 715 | 2975 | 112 | 142 | 357 | |
 | `steps_evaluated` | Number of sequential linear search steps tested. | `3` |
 | `sym_mode` | Symmetry breaking mode used (`n`, `f`, `h`, `l`). | `h` |
 | `verified` | Solution certificate verification boolean (`True`/`False`). | `True` |

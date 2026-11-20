@@ -268,9 +268,47 @@ def test_cli_optimize_timeout(capsys: pytest.CaptureFixture[str]) -> None:
     ret = main([
         "optimize",
         "-g", "instances/A-pores_1.mtx.rnd",
-        "--start-w", "10",
+        "--start-w", "6",
         "-t", "0.005",
     ])
     assert ret == 1
     captured = capsys.readouterr()
     assert "TIMEOUT" in captured.out
+
+
+def test_cli_inspect_default_width_uses_lower_bound(capsys: pytest.CaptureFixture[str]) -> None:
+    # Omit -w on pores_1 (Sinnl lower bound = 6, upper bound = 8)
+    ret = main(["inspect", "-g", "instances/A-pores_1.mtx.rnd"])
+    assert ret == 0
+    captured = capsys.readouterr()
+    assert "Predefined Lower Bound (LB): 6" in captured.out
+    assert "Predefined Upper Bound (UB): 8" in captured.out
+    assert "Theoretical Bound U: 15" in captured.out
+    assert "Target Threshold w:  6 (predefined lower bound)" in captured.out
+
+
+def test_cli_solve_default_width_uses_lower_bound(capsys: pytest.CaptureFixture[str]) -> None:
+    # Omit -w on pores_1
+    ret = main(["solve", "-g", "instances/A-pores_1.mtx.rnd", "-t", "5.0"])
+    assert ret == 0
+    captured = capsys.readouterr()
+    assert "Target w:      6 (predefined lower bound)" in captured.out
+    assert "Status:        SAT" in captured.out
+
+
+def test_cli_solve_explicit_width_overrides_lower_bound(capsys: pytest.CaptureFixture[str]) -> None:
+    # Explicitly pass -w 2 on pores_1
+    ret = main(["solve", "-g", "instances/A-pores_1.mtx.rnd", "-w", "2", "-t", "5.0"])
+    assert ret == 0
+    captured = capsys.readouterr()
+    assert "Target w:      2\n" in captured.out
+
+
+def test_cli_optimize_default_start_w_uses_lower_bound(capsys: pytest.CaptureFixture[str]) -> None:
+    # Omit --start-w on pores_1
+    ret = main(["optimize", "-g", "instances/A-pores_1.mtx.rnd", "-t", "10.0"])
+    assert ret == 0
+    captured = capsys.readouterr()
+    assert "Start w:       6 (predefined lower bound)" in captured.out
+    assert "Upper Bound w: 8" in captured.out
+

@@ -53,8 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_parser.add_argument(
         "-w", "--width",
         type=int,
-        default=2,
-        help="Target bandwidth threshold w for formula calculation (default: 2)",
+        default=None,
+        help="Target bandwidth threshold w for formula calculation (default: graph predefined lower bound, or 2)",
     )
     inspect_parser.add_argument(
         "-s", "--sym",
@@ -78,9 +78,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     solve_parser.add_argument(
         "-w", "--width",
-        required=True,
+        required=False,
         type=int,
-        help="Target bandwidth threshold w (2 <= w <= n)",
+        default=None,
+        help="Target bandwidth threshold w (2 <= w <= n) (default: graph predefined lower bound, or 2)",
     )
     solve_parser.add_argument(
         "-s", "--sym",
@@ -128,8 +129,8 @@ def build_parser() -> argparse.ArgumentParser:
     opt_parser.add_argument(
         "--start-w",
         type=int,
-        default=2,
-        help="Starting lower bound for linear search (default: 2)",
+        default=None,
+        help="Starting lower bound for linear search (default: graph predefined lower bound, or 2)",
     )
     opt_parser.add_argument(
         "-s", "--sym",
@@ -172,14 +173,19 @@ def handle_inspect(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error loading graph from '{args.graph}': {e}\n")
         return 1
 
-    if args.width < 2 or args.width > graph.n:
+    lb = graph.get_lower_bound()
+    ub = graph.get_upper_bound()
+    u_theo = graph.get_theoretical_upper_bound()
+
+    effective_w = lb if args.width is None else args.width
+    if effective_w < 2 or effective_w > graph.n:
         sys.stderr.write(
-            f"Error: Target bandwidth w must satisfy 2 <= w <= n ({graph.n}), got w={args.width}\n"
+            f"Error: Target bandwidth w must satisfy 2 <= w <= n ({graph.n}), got w={effective_w}\n"
         )
         return 1
 
     # Theoretical calculations
-    encoder = SCLEncoder(graph=graph, w=args.width, sym_mode=args.sym)
+    encoder = SCLEncoder(graph=graph, w=effective_w, sym_mode=args.sym)
     n_vars_theo, n_clauses_theo = encoder.expected_counts()
 
     deg_vals = list(graph.degrees.values())
@@ -187,14 +193,15 @@ def handle_inspect(args: argparse.Namespace) -> int:
     max_deg = max(deg_vals) if deg_vals else 0
     avg_deg = (sum(deg_vals) / len(deg_vals)) if deg_vals else 0.0
 
-    k_blocks = math.ceil(graph.n / args.width)
-    d_rem = graph.n - (k_blocks - 1) * args.width
-    u_bound = graph.get_upper_bound()
+    k_blocks = math.ceil(graph.n / effective_w)
+    d_rem = graph.n - (k_blocks - 1) * effective_w
 
     sym_v = graph.get_symmetry_vertex(args.sym)
     sym_desc = f"{args.sym}"
     if sym_v is not None:
         sym_desc += f" (vertex {sym_v}, degree {graph.degrees[sym_v]})"
+
+    w_annotation = " (predefined lower bound)" if args.width is None else ""
 
     print("=" * 60)
     print("              Anti-Bandwidth Graph Inspection")
@@ -205,13 +212,15 @@ def handle_inspect(args: argparse.Namespace) -> int:
     print(f"Edges (m):           {graph.m}")
     print(f"Degree (min/avg/max): {min_deg} / {avg_deg:.2f} / {max_deg}")
     print(f"Isolated Vertices:   {graph.has_isolated_vertices()}")
-    print(f"Theoretical Bound U: {u_bound}")
+    print(f"Predefined Lower Bound (LB): {lb}")
+    print(f"Predefined Upper Bound (UB): {ub}")
+    print(f"Theoretical Bound U: {u_theo}")
     if graph.best_known_w is not None:
         print(f"Best Known w:        {graph.best_known_w}")
     print()
-    print(f"Target Threshold w:  {args.width}")
+    print(f"Target Threshold w:  {effective_w}{w_annotation}")
     print(f"Symmetry Mode:       {sym_desc}")
-    print(f"Block Count (K):     {k_blocks} (block size w={args.width}, remainder d={d_rem})")
+    print(f"Block Count (K):     {k_blocks} (block size w={effective_w}, remainder d={d_rem})")
     print()
     print("--- Theoretical SCL Formula Size ---")
     print(f"Theoretical Variables (N): {n_vars_theo:,}")
@@ -228,19 +237,20 @@ def handle_solve(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error loading graph from '{args.graph}': {e}\n")
         return 1
 
-    if args.width < 2:
-        sys.stderr.write(f"Error: Width w must be >= 2, got w={args.width}\n")
+    effective_w = graph.get_lower_bound() if args.width is None else args.width
+    if effective_w < 2:
+        sys.stderr.write(f"Error: Width w must be >= 2, got w={effective_w}\n")
         return 1
-    if args.width > graph.n:
+    if effective_w > graph.n:
         sys.stderr.write(
-            f"Error: Width w cannot exceed number of vertices n={graph.n}, got w={args.width}\n"
+            f"Error: Width w cannot exceed number of vertices n={graph.n}, got w={effective_w}\n"
         )
         return 1
 
     solver = ABPSolver()
     res = solver.solve(
         graph=graph,
-        w=args.width,
+        w=effective_w,
         sym_mode=args.sym,
         timeout=args.timeout,
         mem_limit=args.mem_limit,
@@ -249,12 +259,13 @@ def handle_solve(args: argparse.Namespace) -> int:
     if not args.quiet:
         timeout_str = f"{args.timeout}s" if args.timeout is not None else "None"
         mem_str = f"{args.mem_limit} GB" if args.mem_limit is not None else "None"
+        w_annotation = " (predefined lower bound)" if args.width is None else ""
         print("=" * 60)
         print("              Anti-Bandwidth Decision Problem")
         print("=" * 60)
         print(f"Instance:      {args.graph}")
         print(f"Vertices (n):  {graph.n}, Edges (m): {graph.m}")
-        print(f"Target w:      {args.width}")
+        print(f"Target w:      {effective_w}{w_annotation}")
         print(f"Symmetry Mode: {args.sym}")
         print(f"Timeout:       {timeout_str}, Mem Limit: {mem_str}")
         print("-" * 60)
@@ -305,22 +316,26 @@ def handle_optimize(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error loading graph from '{args.graph}': {e}\n")
         return 1
 
-    if args.start_w < 2:
-        sys.stderr.write(f"Error: start-w must be >= 2, got start-w={args.start_w}\n")
+    effective_start_w = graph.get_lower_bound() if args.start_w is None else args.start_w
+    if effective_start_w < 2:
+        sys.stderr.write(f"Error: start-w must be >= 2, got start-w={effective_start_w}\n")
         return 1
 
     optimizer = ABPOptimizer()
+    ub = graph.get_upper_bound()
 
     if not args.quiet:
         timeout_str = f"{args.timeout}s" if args.timeout is not None else "None"
         mem_str = f"{args.mem_limit} GB" if args.mem_limit is not None else "None"
+        start_annotation = " (predefined lower bound)" if args.start_w is None else ""
         print("=" * 60)
         print("           Anti-Bandwidth Optimization Search")
         print("=" * 60)
         print(f"Instance:      {args.graph}")
         print(f"Vertices (n):  {graph.n}, Edges (m): {graph.m}")
-        print(f"Upper Bound U: {graph.get_upper_bound()}")
-        print(f"Start w:       {args.start_w}, Symmetry: {args.sym}")
+        print(f"Start w:       {effective_start_w}{start_annotation}")
+        print(f"Upper Bound w: {ub}")
+        print(f"Symmetry:      {args.sym}")
         print(f"Total Timeout: {timeout_str}, Mem Limit: {mem_str}")
         print("-" * 60)
         print(f"{'Step w':<8} {'Status':<12} {'Solve (s)':<12} {'Total (s)':<12}")
@@ -328,7 +343,7 @@ def handle_optimize(args: argparse.Namespace) -> int:
 
     res = optimizer.linear_search(
         graph=graph,
-        start_w=args.start_w,
+        start_w=effective_start_w,
         sym_mode=args.sym,
         timeout=args.timeout,
         mem_limit=args.mem_limit,
