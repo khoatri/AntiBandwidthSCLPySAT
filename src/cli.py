@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-s", "--sym",
         choices=["n", "f", "h", "l"],
         default="n",
-        help="Symmetry breaking mode: n (none), f (first-vertex), h (half/max-degree), l (lowest-degree) (default: n)",
+        help="Symmetry breaking mode: n (none), f (first-vertex), h (highest-degree), l (lowest-degree) (default: n)",
     )
 
     # -------------------------------------------------------------------------
@@ -87,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-s", "--sym",
         choices=["n", "f", "h", "l"],
         default="n",
-        help="Symmetry breaking mode: n (none), f (first-vertex), h (half/max-degree), l (lowest-degree) (default: n)",
+        help="Symmetry breaking mode: n (none), f (first-vertex), h (highest-degree), l (lowest-degree) (default: n)",
     )
     solve_parser.add_argument(
         "-t", "--timeout",
@@ -136,7 +136,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-s", "--sym",
         choices=["n", "f", "h", "l"],
         default="n",
-        help="Symmetry breaking mode: n (none), f (first-vertex), h (half/max-degree), l (lowest-degree) (default: n)",
+        help="Symmetry breaking mode: n (none), f (first-vertex), h (highest-degree), l (lowest-degree) (default: n)",
     )
     opt_parser.add_argument(
         "-t", "--timeout",

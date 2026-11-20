@@ -95,7 +95,7 @@ Profiles graph properties and calculates exact theoretical SCL formula dimension
 | :--- | :--- | :---: | :---: | :--- |
 | `-g` | `--graph` | `str` | *required* | Path to input graph instance file (`*.mtx.rnd`). |
 | `-w` | `--width` | `int` | `None` | Target bandwidth threshold $w$ for theoretical formula sizing ($2 \le w \le n$). Defaults to the graph's predefined lower bound (or `2`). |
-| `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (half/max-degree), `l` (lowest-degree). |
+| `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (highest-degree), `l` (lowest-degree). |
 | `-h` | `--help` | | | Show help message and exit. |
 
 **Example:**
@@ -116,7 +116,7 @@ Solves a single decision problem instance: **Is $\mathrm{AB}(G) \ge w$?** Return
 | :--- | :--- | :---: | :---: | :--- |
 | `-g` | `--graph` | `str` | *required* | Path to input graph instance file (`*.mtx.rnd`). |
 | `-w` | `--width` | `int` | `None` | Target bandwidth threshold $w$ ($2 \le w \le n$). Defaults to the graph's predefined lower bound (or `2`). |
-| `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n`, `f`, `h`, or `l`. |
+| `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (highest-degree), `l` (lowest-degree). |
 | `-t` | `--timeout` | `float` | `None` | Maximum solve time limit in seconds. |
 | `-m` | `--mem-limit` | `float` | `None` | Maximum memory limit in **GB** per solve step (e.g. `30.0`). |
 | `-o` | `--output` | `str` | `None` | Path to save JSON result. Accepts a specific file (`result.json`) or a directory (`/tmp/`), which writes `<instance_name>.json`. |
@@ -141,7 +141,7 @@ Finds the optimal anti-bandwidth $w^*$ via incremental linear search ($w = start
 | :--- | :--- | :---: | :---: | :--- |
 | `-g` | `--graph` | `str` | *required* | Path to input graph instance file (`*.mtx.rnd`). |
 | | `--start-w` | `int` | `None` | Starting lower bound for search ($\ge 2$). Defaults to the graph's predefined lower bound (or `2`). |
-| `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n`, `f`, `h`, or `l`. |
+| `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (highest-degree), `l` (lowest-degree). |
 | `-t` | `--timeout` | `float` | `None` | Total maximum time in seconds for the entire optimization search. |
 | `-m` | `--mem-limit` | `float` | `None` | Maximum memory limit in **GB** per decision step (e.g. `30.0`). |
 | `-o` | `--output` | `str` | `None` | Path to export optimization results to JSON (file path or directory). |
@@ -170,7 +170,7 @@ python -m src.automation [options]
 | :--- | :--- | :---: | :---: | :--- |
 | `-i` | `--instances-dir` | `str` | `"instances"` | Directory containing benchmark graph instances (`*.mtx.rnd`). |
 | `-o` | `--output-dir` | `str` | `"benchmarks"` | Output directory where `summary.csv`, manifest, and `results/` are stored. |
-| `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode applied across the campaign (`n`, `f`, `h`, `l`). |
+| `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (highest-degree), `l` (lowest-degree). |
 | `-t` | `--timeout` | `float` | `1800.0` | Total timeout in seconds per instance for linear search. |
 | `-m` | `--mem-limit` | `float` | `30.0` | Maximum memory limit in **GB** per decision step. |
 | | `--skip-existing` | `flag` | `False` | Skip instances that already have completed JSON output in `output_dir/results`. |
@@ -223,5 +223,5 @@ Symmetry breaking eliminates this duality by enforcing $\phi(s) \le \lceil n/2 \
 | :---: | :--- | :--- | :--- |
 | `n` | None | No symmetry breaking applied. | $0$ |
 | `f` | First-vertex | $s = 1$ (first vertex in graph). | $\lfloor n/2 \rfloor$ clauses $\neg A_{1, \ell}$ for $\ell > \lceil n/2 \rceil$ |
-| `h` | Half-degree (Max) | $s = \arg\max_{v} \deg(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |
+| `h` | Highest-degree (Max) | $s = \arg\max_{v} \deg(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |
 | `l` | Lowest-degree (Min) | $s = \arg\min_{v} \deg(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |

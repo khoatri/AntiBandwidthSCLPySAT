@@ -55,7 +55,7 @@ def build_automation_parser() -> argparse.ArgumentParser:
         "-s", "--sym",
         choices=["n", "f", "h", "l"],
         default="n",
-        help="Symmetry breaking mode: n (none), f (first-vertex), h (half/max-degree), l (lowest-degree) (default: n)",
+        help="Symmetry breaking mode: n (none), f (first-vertex), h (highest-degree), l (lowest-degree) (default: n)",
     )
     parser.add_argument(
         "-t", "--timeout",

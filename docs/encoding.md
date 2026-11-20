@@ -161,8 +161,8 @@ $$\neg A_{s, \ell} \qquad \left(\lceil n/2 \rceil < \ell \le n\right)$$
 |---|---|---|
 | `n` | None | No symmetry breaking (default) |
 | `f` | First | Vertex $1$ |
-| `h` | High degree | Maximum-degree vertex (lowest index breaks ties) |
-| `l` | Low degree | Minimum-degree vertex (lowest index breaks ties) |
+| `h` | Highest degree | Maximum-degree vertex (lowest index breaks ties) |
+| `l` | Lowest degree | Minimum-degree vertex (lowest index breaks ties) |
 
 ---
 
