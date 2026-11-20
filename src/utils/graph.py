@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -12,8 +12,8 @@ class Graph:
     edges: tuple[tuple[int, int], ...]
     name: str = ""
     best_known_w: Optional[int] = None
-    adjacency: dict[int, set[int]] = None  # type: ignore[assignment]
-    degrees: dict[int, int] = None  # type: ignore[assignment]
+    adjacency: dict[int, set[int]] = field(default=None, hash=False, compare=False, repr=False)  # type: ignore[assignment]
+    degrees: dict[int, int] = field(default=None, hash=False, compare=False, repr=False)  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.n < 2:

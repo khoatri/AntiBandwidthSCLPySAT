@@ -120,7 +120,7 @@ class ABPOptimizer:
                 optimal_labeling = best_labeling
                 break
 
-        total_time = sum(s.total_time for s in steps)
+        total_time = time.perf_counter() - t_start
         return OptimizationResult(
             optimal_w=optimal_w,
             optimal_labeling=optimal_labeling,

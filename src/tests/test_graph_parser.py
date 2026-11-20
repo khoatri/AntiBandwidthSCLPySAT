@@ -118,3 +118,21 @@ def test_parser_edge_count_mismatch(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Edge count mismatch"):
         parse_instance(mismatch_file)
 
+
+def test_graph_hashable_and_usable_in_sets_and_dicts() -> None:
+    g1 = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)), name="P4")
+    g2 = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)), name="P4")
+    g3 = Graph(n=3, edges=((1, 2),), name="P2")
+
+    # Hash should be an int and consistent
+    assert isinstance(hash(g1), int)
+    assert hash(g1) == hash(g2)
+
+    # Graph can be in sets
+    s = {g1, g2, g3}
+    assert len(s) == 2
+
+    # Graph can be dict key
+    d = {g1: "data_p4", g3: "data_p2"}
+    assert d[g2] == "data_p4"
+
