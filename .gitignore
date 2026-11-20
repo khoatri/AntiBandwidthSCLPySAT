@@ -22,3 +22,5 @@ dist/
 benchmarks/results/
 benchmarks/summary.csv
 benchmarks/campaign_manifest.json
+
+.~lock.*
