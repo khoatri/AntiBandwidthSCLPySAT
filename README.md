@@ -207,34 +207,9 @@ The `summary.csv` file is streamed and flushed row-by-row live as each instance 
 
 ### 2.1 Benchmark Predefined Bounds (Sinnl, 2018)
 
-Reference lower bounds ($LB$) and upper bounds ($UB$) from Markus Sinnl (2018), *A note on computational approaches for the antibandwidth problem*:
+Reference lower bounds ($LB$) and upper bounds ($UB$) for the 24 standard benchmark instances are taken from Markus Sinnl (2018), *A note on computational approaches for the antibandwidth problem*.
 
-| Instance | $n$ | $m$ | Lower Bound (LB) | Upper Bound (UB) | Theoretical $\lfloor n/2 \rfloor$ | Notes |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `A-pores_1.mtx.rnd` | 30 | 103 | 6 | 8 | 15 | |
-| `B-ibm32.mtx.rnd` | 32 | 90 | 9 | 9 | 16 | **Proved optimal in 1 step!** ($LB=UB$) |
-| `C-bcspwr01.mtx.rnd` | 39 | 46 | 16 | 17 | 19 | |
-| `D-bcsstk01.mtx.rnd` | 48 | 176 | 8 | 9 | 24 | |
-| `E-bcspwr02.mtx.rnd` | 49 | 59 | 21 | 22 | 24 | |
-| `F-curtis54.mtx.rnd` | 54 | 124 | 12 | 13 | 27 | |
-| `G-will57.mtx.rnd` | 57 | 127 | 12 | 14 | 28 | |
-| `H-impcol_b.mtx.rnd` | 59 | 281 | 8 | 8 | 29 | **Proved optimal in 1 step!** ($LB=UB$) |
-| `I-ash85.mtx.rnd` | 85 | 219 | 19 | 27 | 42 | |
-| `J-nos4.mtx.rnd` | 100 | 247 | 32 | 40 | 50 | |
-| `K-dwt__234.mtx.rnd` | 117 | 162 | 46 | 58 | 58 | |
-| `L-bcspwr03.mtx.rnd` | 118 | 179 | 39 | 39 | 59 | **Proved optimal in 1 step!** ($LB=UB$) |
-| `M-bcsstk06.mtx.rnd` | 420 | 3720 | 28 | 72 | 210 | Search pruned to 72 (vs 210) |
-| `N-bcsstk07.mtx.rnd` | 420 | 3720 | 28 | 72 | 210 | Search pruned to 72 (vs 210) |
-| `O-impcol_d.mtx.rnd` | 425 | 1267 | 91 | 173 | 212 | |
-| `P-can__445.mtx.rnd` | 445 | 1682 | 78 | 120 | 222 | |
-| `Q-494_bus.mtx.rnd` | 494 | 586 | 219 | 246 | 247 | |
-| `R-dwt__503.mtx.rnd` | 503 | 2762 | 46 | 71 | 251 | |
-| `S-sherman4.mtx.rnd` | 546 | 1341 | 256 | 272 | 273 | |
-| `T-dwt__592.mtx.rnd` | 592 | 2256 | 103 | 150 | 296 | |
-| `U-662_bus.mtx.rnd` | 662 | 906 | 219 | 220 | 331 | |
-| `V-nos6.mtx.rnd` | 675 | 1290 | 326 | 337 | 337 | |
-| `W-685_bus.mtx.rnd` | 685 | 1282 | 136 | 136 | 342 | **Proved optimal in 1 step!** ($LB=UB$) |
-| `X-can__715.mtx.rnd` | 715 | 2975 | 112 | 142 | 357 | |
+For the complete reference table containing all 24 benchmark instances, published bounds, theoretical limits, and 1-step optimality notes, see [Benchmark Predefined Bounds in docs/encoding.md](docs/encoding.md#benchmark-predefined-bounds-sinnl-2018).
 
 ---
 
