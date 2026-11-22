@@ -18,12 +18,7 @@ build/
 dist/
 *.egg-info/
 
-# Benchmark outputs
-benchmarks/symmetry-breaking-mode-f/
-benchmarks/symmetry-breaking-mode-h/
-benchmarks/results/
-benchmarks/summary.csv
-benchmarks/campaign_manifest.json
-tmp/
+# Legacy files
+legacy/
 
 .~lock.*

@@ -18,12 +18,16 @@ AntiBandwidthSCLPySAT/
 ├── requirements.txt               # Direct Python dependencies
 ├── pyproject.toml                 # Package metadata and test configurations
 ├── docs/
+│   ├── comparison.md              # Kissat vs CaDiCaL benchmarking methodology & results
 │   └── encoding.md                # Exact mathematical SCL formulation and count proofs
 ├── instances/                     # Matrix Market benchmark graph instances (*.mtx.rnd)
 ├── benchmarks/                    # Output directory for campaigns (CSV, JSON logs)
 └── src/
     ├── cli.py                     # Unified Command-Line Interface (inspect, solve, optimize)
     ├── automation.py              # Batch campaign runner across instances
+    ├── comparison/                # Cross-solver comparison tooling (CaDiCaL parser & Excel generator)
+    │   ├── cadical_log_parser.py  # Ingests CaDiCaL runlim logs into standard 11-col CSV
+    │   └── excel_comparator.py    # Generates multi-mode, multi-tab comparison workbooks
     ├── encoding/                  # SCL CNF encoding engine
     │   ├── scl_encoder.py         # Main SCL formula assembler and count validator
     │   ├── ladder.py              # Prefix/suffix ladder chains & block occupancy
@@ -224,3 +228,9 @@ Symmetry breaking eliminates this duality by enforcing $\phi(s) \le \lceil n/2 \
 | `f` | First-vertex | $s = 1$ (first vertex in graph). | $\lfloor n/2 \rfloor$ clauses $\neg A_{1, \ell}$ for $\ell > \lceil n/2 \rceil$ |
 | `h` | Highest-degree (Max) | $s = \arg\max_{v} \deg(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |
 | `l` | Lowest-degree (Min) | $s = \arg\min_{v} \deg(v)$, breaking ties by lowest vertex index. | $\lfloor n/2 \rfloor$ clauses $\neg A_{s, \ell}$ for $\ell > \lceil n/2 \rceil$ |
+
+---
+
+## Cross-Solver Comparison Tooling (`src.comparison`)
+
+The `src.comparison` package provides utilities to evaluate Kissat 4.0.4 results against native CaDiCaL 1.2.1 benchmarks from [AntiBandwidthSCL](https://github.com/TruongXuanHieu-H/AntiBandwidthSCL.git). Detailed benchmarking methodology, metric parity, and evaluation rules are documented in [docs/comparison.md](docs/comparison.md).
