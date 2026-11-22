@@ -301,3 +301,49 @@ def test_format_replica_sheet_with_extra_columns(tmp_path: Path) -> None:
     assert time_cell.number_format == "0.000"
 
 
+def test_no_best_w_hyphen_inserted(tmp_path: Path) -> None:
+    kissat_csv = tmp_path / "kissat.csv"
+    cadical_csv = tmp_path / "cadical.csv"
+    kissat_csv.write_text(
+        "instance,n,m,lower_bound,upper_bound,optimal_w,status,total_time_s,steps_evaluated,sym_mode,verified\n"
+        "M-bcsstk06.mtx.rnd,420,3720,28,72,,TIMEOUT,1800.000,1,f,False\n"
+        "A-pores_1.mtx.rnd,30,103,6,8,6,OPTIMAL,0.225,2,f,True\n"
+    )
+    cadical_csv.write_text(
+        "instance,n,m,lower_bound,upper_bound,optimal_w,status,total_time_s,steps_evaluated,sym_mode,verified\n"
+        "M-bcsstk06.mtx.rnd,420,3720,28,72,,TIMEOUT,1800.210,1,f,False\n"
+        "A-pores_1.mtx.rnd,30,103,6,8,6,OPTIMAL,23.370,2,f,True\n"
+    )
+    out_xlsx = tmp_path / "out_hyphen.xlsx"
+    generate_excel_comparison(
+        kissat_files={"f": kissat_csv},
+        cadical_files={"f": cadical_csv},
+        output_xlsx=out_xlsx,
+    )
+    wb = openpyxl.load_workbook(out_xlsx)
+    ws = wb["Comparison"]
+
+    m_row = None
+    for row in range(3, ws.max_row + 1):
+        if ws.cell(row=row, column=1).value == "M-bcsstk06.mtx.rnd":
+            m_row = row
+            break
+    assert m_row is not None
+    assert ws.cell(row=m_row, column=6).value == "-"
+    assert ws.cell(row=m_row, column=6).alignment.horizontal == "center"
+    assert ws.cell(row=m_row, column=9).value == "-"
+    assert ws.cell(row=m_row, column=9).alignment.horizontal == "center"
+
+    a_row = None
+    for row in range(3, ws.max_row + 1):
+        if ws.cell(row=row, column=1).value == "A-pores_1.mtx.rnd":
+            a_row = row
+            break
+    assert a_row is not None
+    assert ws.cell(row=a_row, column=6).value == 6
+    assert ws.cell(row=a_row, column=6).alignment.horizontal == "right"
+    assert ws.cell(row=a_row, column=9).value == 6
+    assert ws.cell(row=a_row, column=9).alignment.horizontal == "right"
+
+
+

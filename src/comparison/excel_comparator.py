@@ -522,12 +522,14 @@ def generate_excel_comparison(
 
             # Kissat columns: Optimal w, Time (s), Status
             # Optimal w
+            k_opt_val = k_rec.optimal_w if (k_rec and k_rec.optimal_w is not None) else "-"
             k_opt_cell = ws.cell(row=row_num, column=current_col)
-            k_opt_cell.value = (
-                k_rec.optimal_w if (k_rec and k_rec.optimal_w is not None) else ""
-            )
+            k_opt_cell.value = k_opt_val
             k_opt_cell.font = bold_font if k_is_better else regular_font
-            k_opt_cell.alignment = Alignment(horizontal="right", vertical="center")
+            k_opt_cell.alignment = Alignment(
+                horizontal="right" if k_opt_val != "-" else "center",
+                vertical="center",
+            )
             k_opt_cell.border = thin_border
 
             # Time (s)
@@ -564,12 +566,14 @@ def generate_excel_comparison(
 
             # CaDiCal columns: Optimal w, Time (s), Status
             # Optimal w
+            c_opt_val = c_rec.optimal_w if (c_rec and c_rec.optimal_w is not None) else "-"
             c_opt_cell = ws.cell(row=row_num, column=current_col + 3)
-            c_opt_cell.value = (
-                c_rec.optimal_w if (c_rec and c_rec.optimal_w is not None) else ""
-            )
+            c_opt_cell.value = c_opt_val
             c_opt_cell.font = bold_font if c_is_better else regular_font
-            c_opt_cell.alignment = Alignment(horizontal="right", vertical="center")
+            c_opt_cell.alignment = Alignment(
+                horizontal="right" if c_opt_val != "-" else "center",
+                vertical="center",
+            )
             c_opt_cell.border = thin_border
 
             # Time (s)
