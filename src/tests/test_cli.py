@@ -42,6 +42,7 @@ def test_cli_inspect_stdout(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Target Threshold w:  5" in captured.out
     assert "Theoretical Variables (N):" in captured.out
     assert "Theoretical Clauses (C):" in captured.out
+    assert "Best Known w:" not in captured.out
 
 
 def test_cli_inspect_missing_graph(capsys: pytest.CaptureFixture[str]) -> None:
@@ -86,6 +87,7 @@ def test_cli_solve_sat(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> No
     assert data["lower_bound"] == 1
     assert data["upper_bound"] == 2
     assert data["theoretical_upper_bound"] == 2
+    assert "best_known_w" not in data
     assert data["verified"] is True
     assert len(data["labeling"]) == 4
 
@@ -211,6 +213,7 @@ def test_cli_optimize_p4(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> 
     assert data["lower_bound"] == 1
     assert data["upper_bound"] == 2
     assert data["theoretical_upper_bound"] == 2
+    assert "best_known_w" not in data
     assert data["verified"] is True
     assert len(data["steps"]) == 1
 

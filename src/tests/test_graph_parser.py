@@ -13,7 +13,7 @@ def test_parse_real_instance_pores_1() -> None:
 
     g = parse_instance(instance_path)
     assert g.n == 30
-    assert g.best_known_w == 7
+    assert not hasattr(g, "best_known_w")
     assert g.m == 103
     assert g.name == "pores_1.mtx.rnd"
 
@@ -39,13 +39,29 @@ def test_parse_synthetic_instance(tmp_path: Path) -> None:
 
     g = parse_instance(file_path)
     assert g.n == 4
-    assert g.best_known_w == 2
+    assert not hasattr(g, "best_known_w")
     assert g.m == 3
     assert g.name == "test_graph.mtx.rnd"
     assert g.edges == ((1, 2), (2, 3), (3, 4))
     assert g.degrees == {1: 1, 2: 2, 3: 2, 4: 1}
     assert not g.has_isolated_vertices()
     assert g.get_upper_bound() == 2  # 4 // 2
+
+
+def test_parse_three_token_header_ignores_middle_number(tmp_path: Path) -> None:
+    # Header format: <n> <arbitrary_middle_val> <expected_m>
+    content = """Nombre del problema: legacy_format.mtx.rnd
+48 999 2
+1 2
+3 4
+"""
+    file_path = tmp_path / "legacy.mtx.rnd"
+    file_path.write_text(content, encoding="utf-8")
+
+    g = parse_instance(file_path)
+    assert g.n == 48
+    assert g.m == 2
+    assert not hasattr(g, "best_known_w")
 
 
 def test_graph_deduplication_and_self_loops() -> None:

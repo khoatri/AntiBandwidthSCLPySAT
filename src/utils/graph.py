@@ -90,7 +90,6 @@ class Graph:
     n: int
     edges: tuple[tuple[int, int], ...]
     name: str = ""
-    best_known_w: Optional[int] = None
     adjacency: dict[int, set[int]] = field(default=None, hash=False, compare=False, repr=False)  # type: ignore[assignment]
     degrees: dict[int, int] = field(default=None, hash=False, compare=False, repr=False)  # type: ignore[assignment]
 

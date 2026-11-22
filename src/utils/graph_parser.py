@@ -11,7 +11,7 @@ def parse_instance(file_path: Union[str, Path]) -> Graph:
 
     Expected format:
         Line 1 (optional): Nombre del problema: <instance_name>
-        Header: <n> <best_known_w> <m>
+        Header: <n> <expected_m> (or legacy <n> <ignored_val> <expected_m>)
         Edge lines: <u> <v>
     """
     path = Path(file_path)
@@ -20,7 +20,6 @@ def parse_instance(file_path: Union[str, Path]) -> Graph:
 
     name = path.name
     n: int | None = None
-    best_known_w: int | None = None
     expected_m: int | None = None
     edges: list[tuple[int, int]] = []
 
@@ -46,7 +45,9 @@ def parse_instance(file_path: Union[str, Path]) -> Graph:
 
             if n is None:
                 if len(numbers) >= 3:
-                    n, best_known_w, expected_m = numbers[0], numbers[1], numbers[2]
+                    # In legacy 3-token instance headers (<n> <legacy_val> <m>), the middle value
+                    # (historically bandwidth or unused parameter) is ignored.
+                    n, expected_m = numbers[0], numbers[2]
                 elif len(numbers) == 2:
                     # Fallback for standard 2-number header: n, m
                     n, expected_m = numbers[0], numbers[1]
@@ -70,7 +71,6 @@ def parse_instance(file_path: Union[str, Path]) -> Graph:
         n=n,
         edges=tuple(edges),
         name=name,
-        best_known_w=best_known_w,
     )
 
     if expected_m is not None and graph.m != expected_m:

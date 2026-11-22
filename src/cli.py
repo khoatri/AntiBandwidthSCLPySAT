@@ -215,8 +215,6 @@ def handle_inspect(args: argparse.Namespace) -> int:
     print(f"Predefined Lower Bound (LB): {lb}")
     print(f"Predefined Upper Bound (UB): {ub}")
     print(f"Theoretical Bound U: {u_theo}")
-    if graph.best_known_w is not None:
-        print(f"Best Known w:        {graph.best_known_w}")
     print()
     print(f"Target Threshold w:  {effective_w}{w_annotation}")
     print(f"Symmetry Mode:       {sym_desc}")
@@ -290,7 +288,6 @@ def handle_solve(args: argparse.Namespace) -> int:
             "lower_bound": graph.get_lower_bound(),
             "upper_bound": graph.get_upper_bound(),
             "theoretical_upper_bound": graph.get_theoretical_upper_bound(),
-            "best_known_w": graph.best_known_w,
             "w": res.w,
             "sym_mode": args.sym,
             "status": res.status,
@@ -400,7 +397,6 @@ def handle_optimize(args: argparse.Namespace) -> int:
             "lower_bound": graph.get_lower_bound(),
             "upper_bound": res.upper_bound,
             "theoretical_upper_bound": graph.get_theoretical_upper_bound(),
-            "best_known_w": graph.best_known_w,
             "start_w": effective_start_w,
             "sym_mode": args.sym,
             "optimal_w": res.optimal_w,

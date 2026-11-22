@@ -23,7 +23,6 @@ CSV_COLUMNS = [
     "m",
     "lower_bound",
     "upper_bound",
-    "best_known_w",
     "optimal_w",
     "status",
     "total_time_s",
@@ -76,9 +75,9 @@ def build_automation_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--start-w-mode",
-        choices=["lower_bound", "min", "header", "default", "best_known"],
+        choices=["lower_bound", "min", "default"],
         default="lower_bound",
-        help="Starting lower bound mode: 'lower_bound' (default, uses Sinnl benchmark LB or 2), 'min' (starts at 2), 'header' (uses best_known_w from instance header)",
+        help="Starting lower bound mode: 'lower_bound' (default, uses Sinnl benchmark LB or 2), 'min' (starts at 2)",
     )
     parser.add_argument(
         "-q", "--quiet",
@@ -114,8 +113,6 @@ def _process_instance(
 
     if start_w_mode in ("lower_bound", "default"):
         start_w = graph.get_lower_bound()
-    elif start_w_mode in ("header", "best_known") and graph.best_known_w is not None:
-        start_w = max(2, graph.best_known_w)
     elif start_w_mode == "min":
         start_w = 2
     else:
@@ -159,7 +156,6 @@ def _process_instance(
         "lower_bound": graph.get_lower_bound(),
         "upper_bound": res.upper_bound,
         "theoretical_upper_bound": graph.get_theoretical_upper_bound(),
-        "best_known_w": graph.best_known_w,
         "start_w": start_w,
         "sym_mode": sym_mode,
         "optimal_w": res.optimal_w,
@@ -182,7 +178,6 @@ def _process_instance(
         "m": str(graph.m),
         "lower_bound": str(graph.get_lower_bound()),
         "upper_bound": str(res.upper_bound),
-        "best_known_w": str(graph.best_known_w) if graph.best_known_w is not None else "",
         "optimal_w": str(res.optimal_w) if res.optimal_w is not None else "",
         "status": res.status,
         "total_time_s": f"{res.total_time:.3f}",

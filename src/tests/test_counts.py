@@ -73,7 +73,7 @@ def test_parameter_sweep_complete_graphs(n: int) -> None:
 
 
 def test_counts_on_real_instances() -> None:
-    # Instance A-pores_1.mtx.rnd: n=30, m=103, best_known_w=7
+    # Instance A-pores_1.mtx.rnd: n=30, m=103
     pores_path = INSTANCES_DIR / "A-pores_1.mtx.rnd"
     if pores_path.exists():
         g = parse_instance(pores_path)
@@ -86,7 +86,7 @@ def test_counts_on_real_instances() -> None:
                 assert res.n_vars == exp_n
                 assert res.n_clauses == exp_c
 
-    # Instance B-ibm32.mtx.rnd: n=32, m=90, best_known_w=9
+    # Instance B-ibm32.mtx.rnd: n=32, m=90
     ibm_path = INSTANCES_DIR / "B-ibm32.mtx.rnd"
     if ibm_path.exists():
         g = parse_instance(ibm_path)

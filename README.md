@@ -174,7 +174,7 @@ python -m src.automation [options]
 | `-t` | `--timeout` | `float` | `1800.0` | Total timeout in seconds per instance for linear search. |
 | `-m` | `--mem-limit` | `float` | `30.0` | Maximum memory limit in **GB** per decision step. |
 | | `--skip-existing` | `flag` | `False` | Skip instances that already have completed JSON output in `output_dir/results`. |
-| | `--start-w-mode` | `choice` | `lower_bound` | Starting lower bound mode: `'lower_bound'` (default, uses Sinnl benchmark LB or 2), `'min'` (starts at 2), or `'header'` (starts at header's `best_known_w`). |
+| | `--start-w-mode` | `choice` | `lower_bound` | Starting lower bound mode: `'lower_bound'` (default, uses Sinnl benchmark LB or 2), `'min'` (starts at 2). |
 | `-q` | `--quiet` | `flag` | `False` | Suppress per-instance console progress logs. |
 | `-h` | `--help` | | | Show help message and exit. |
 
@@ -195,7 +195,6 @@ The `summary.csv` file is streamed and flushed row-by-row live as each instance 
 | `m` | Number of edges $\|E\|$. | `103` |
 | `lower_bound` | Predefined benchmark lower bound (Sinnl 2018 or fallback 1). | `6` |
 | `upper_bound` | Predefined benchmark upper bound (Sinnl 2018 or theoretical limit). | `8` |
-| `best_known_w` | Best known bandwidth recorded in instance header. | `7` |
 | `optimal_w` | Maximum feasible bandwidth $w^*$ discovered. | `6` |
 | `status` | Search outcome: `OPTIMAL`, `TIMEOUT`, `MEMOUT`, `UNSAT_START`, or `ERROR`. | `OPTIMAL` |
 | `total_time_s` | Cumulative search time in seconds across all steps. | `0.297` |

@@ -29,7 +29,7 @@ def test_automation_custom_args() -> None:
         "-t", "60.0",
         "-m", "16.0",
         "--skip-existing",
-        "--start-w-mode", "best_known",
+        "--start-w-mode", "min",
     ])
     assert args.instances_dir == "custom_inst"
     assert args.output_dir == "custom_out"
@@ -37,7 +37,15 @@ def test_automation_custom_args() -> None:
     assert args.timeout == 60.0
     assert args.mem_limit == 16.0
     assert args.skip_existing is True
-    assert args.start_w_mode == "best_known"
+    assert args.start_w_mode == "min"
+
+
+def test_automation_start_w_mode_best_known_rejected() -> None:
+    parser = build_automation_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--start-w-mode", "best_known"])
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--start-w-mode", "header"])
 
 
 def test_automation_empty_directory(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -102,7 +110,7 @@ def test_automation_single_instance_campaign(tmp_path: Path) -> None:
         assert r["instance"] == "test_p4.mtx.rnd"
         assert r["n"] == "4"
         assert r["m"] == "3"
-        assert r["best_known_w"] == "2"
+        assert "best_known_w" not in r
         assert r["optimal_w"] == "2"
         assert r["status"] == "OPTIMAL"
         assert r["verified"] == "True"
@@ -112,6 +120,7 @@ def test_automation_single_instance_campaign(tmp_path: Path) -> None:
     res_file = out_dir / "results" / "test_p4.mtx.rnd.json"
     assert res_file.exists()
     data = json.loads(res_file.read_text())
+    assert "best_known_w" not in data
     assert data["optimal_w"] == 2
     assert data["status"] == "OPTIMAL"
     assert data["verified"] is True
@@ -250,7 +259,7 @@ def test_automation_timeout_handling(tmp_path: Path) -> None:
         "-i", str(inst_dir),
         "-o", str(out_dir),
         "-t", "0.005",
-        "--start-w-mode", "best_known",  # starts at w=7
+        "--start-w-mode", "lower_bound",  # starts at LB=6
     ])
     ret = run_campaign(args)
     assert ret == 0
@@ -347,9 +356,9 @@ def test_automation_explicit_start_w_modes(tmp_path: Path) -> None:
     data_min = json.loads((out_dir / "min" / "results" / "A-pores_1.mtx.rnd.json").read_text())
     assert data_min["start_w"] == 2
 
-    # Mode 'header' starts at header's 7
-    args_header = parser.parse_args(["-i", str(inst_dir), "-o", str(out_dir / "header"), "--start-w-mode", "header", "-t", "5.0"])
-    assert run_campaign(args_header) == 0
-    data_header = json.loads((out_dir / "header" / "results" / "A-pores_1.mtx.rnd.json").read_text())
-    assert data_header["start_w"] == 7
+    # Mode 'default' / 'lower_bound' starts at Sinnl LB 6
+    args_default = parser.parse_args(["-i", str(inst_dir), "-o", str(out_dir / "default"), "--start-w-mode", "default", "-t", "5.0"])
+    assert run_campaign(args_default) == 0
+    data_default = json.loads((out_dir / "default" / "results" / "A-pores_1.mtx.rnd.json").read_text())
+    assert data_default["start_w"] == 6
 
