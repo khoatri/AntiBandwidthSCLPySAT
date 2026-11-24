@@ -310,3 +310,59 @@ def test_cli_optimize_default_start_w_uses_lower_bound(capsys: pytest.CaptureFix
     assert "Start w:       6 (predefined lower bound)" in captured.out
     assert "Upper Bound w: 8" in captured.out
 
+
+def test_cli_solve_cadical300(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    out_file = tmp_path / "solve_cadical300.json"
+    p4_file = tmp_path / "p4.mtx.rnd"
+    p4_file.write_text("Nombre del problema: P4\n4 2 3\n1 2\n2 3\n3 4\n")
+
+    ret = main([
+        "solve",
+        "-g", str(p4_file),
+        "-w", "2",
+        "-S", "cadical300",
+        "-o", str(out_file),
+    ])
+    assert ret == 0
+    captured = capsys.readouterr()
+    assert "Solver:        cadical300" in captured.out
+    assert "SAT" in captured.out
+
+    assert out_file.exists()
+    data = json.loads(out_file.read_text())
+    assert data["solver"] == "cadical300"
+    assert data["status"] == "SAT"
+
+
+def test_cli_optimize_cadical300(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    out_file = tmp_path / "opt_cadical300.json"
+    p4_file = tmp_path / "p4.mtx.rnd"
+    p4_file.write_text("Nombre del problema: P4\n4 2 3\n1 2\n2 3\n3 4\n")
+
+    ret = main([
+        "optimize",
+        "-g", str(p4_file),
+        "-S", "cadical300",
+        "-o", str(out_file),
+    ])
+    assert ret == 0
+    captured = capsys.readouterr()
+    assert "Solver:        cadical300" in captured.out
+    assert "OPTIMAL" in captured.out
+
+    assert out_file.exists()
+    data = json.loads(out_file.read_text())
+    assert data["solver"] == "cadical300"
+    assert data["optimal_w"] == 2
+
+
+def test_cli_solve_invalid_solver(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    p4_file = tmp_path / "p4.mtx.rnd"
+    p4_file.write_text("Nombre del problema: P4\n4 2 3\n1 2\n2 3\n3 4\n")
+    with pytest.raises(SystemExit) as exc_info:
+        main(["solve", "-g", str(p4_file), "-S", "invalid_solver"])
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "invalid choice" in captured.err.lower() or "invalid_solver" in captured.err.lower()
+
+

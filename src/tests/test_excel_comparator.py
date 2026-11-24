@@ -7,6 +7,7 @@ from src.comparison.excel_comparator import (
     SolverRecord,
     determine_better_solver,
     determine_bold_cells,
+    determine_winning_solvers,
     generate_excel_comparison,
     load_csv,
     main,
@@ -18,6 +19,14 @@ B-ibm32.mtx.rnd,32,90,9,9,9,OPTIMAL,0.158,1,f,True
 C-bcspwr01.mtx.rnd,39,46,16,17,17,OPTIMAL,0.318,2,f,True
 I-ash85.mtx.rnd,85,219,19,27,21,TIMEOUT,1800.000,4,f,True
 M-bcsstk06.mtx.rnd,420,3720,28,72,,TIMEOUT,1800.000,1,f,False
+"""
+
+SAMPLE_CADICAL300_CSV = """instance,n,m,lower_bound,upper_bound,optimal_w,status,total_time_s,steps_evaluated,sym_mode,verified
+A-pores_1.mtx.rnd,30,103,6,8,6,OPTIMAL,0.452,2,f,True
+B-ibm32.mtx.rnd,32,90,9,9,9,OPTIMAL,0.220,1,f,True
+C-bcspwr01.mtx.rnd,39,46,16,17,16,TIMEOUT,1800.000,1,f,True
+I-ash85.mtx.rnd,85,219,19,27,21,TIMEOUT,1800.010,4,f,True
+M-bcsstk06.mtx.rnd,420,3720,28,72,,TIMEOUT,1800.100,1,f,False
 """
 
 SAMPLE_CADICAL_CSV = """instance,n,m,lower_bound,upper_bound,optimal_w,status,total_time_s,steps_evaluated,sym_mode,verified
@@ -52,7 +61,7 @@ def test_load_csv(tmp_path: Path) -> None:
 
 
 def test_determine_bold_cells() -> None:
-    # 1. Strict timeout tie: both TIMEOUT with same w* -> NO cells bolded & no winner
+    # 1. Timeout tie with same w*: under new rule, both tie for first place and both are bolded
     k_timeout = SolverRecord(
         "I-ash85.mtx.rnd", 85, 219, 19, 27, 21, "TIMEOUT", 1800.0, 4, "f", True
     )
@@ -61,8 +70,8 @@ def test_determine_bold_cells() -> None:
     )
     assert determine_better_solver(k_timeout, c_timeout) is None
     bold_k, bold_c = determine_bold_cells(k_timeout, c_timeout)
-    assert bold_k == set()
-    assert bold_c == set()
+    assert bold_k == {"optimal_w", "time", "status"}
+    assert bold_c == {"optimal_w", "time", "status"}
 
     # 2. Both TIMEOUT without finding any SAT step (both optimal_w is None) -> NO cells bolded
     k_none = SolverRecord(
@@ -194,9 +203,20 @@ def test_generate_excel_comparison(tmp_path: Path) -> None:
             break
     assert ash_row is not None
 
-    # On ash_row, both are TIMEOUT with w*=21 -> NO cell should be bold
+    # On ash_row, both are TIMEOUT with w*=21 -> Both tie for first place and both are bold
     for col in range(6, 12):
         cell = ws.cell(row=ash_row, column=col)
+        assert cell.font is not None and cell.font.bold is True
+
+    # But for M-bcsstk06 (both timeout with optimal_w is None), NO cells are bold
+    m_row = None
+    for row in range(3, ws.max_row + 1):
+        if ws.cell(row=row, column=1).value == "M-bcsstk06.mtx.rnd":
+            m_row = row
+            break
+    assert m_row is not None
+    for col in range(6, 12):
+        cell = ws.cell(row=m_row, column=col)
         assert cell.font is None or not cell.font.bold
 
     # But status cell should have pastel red fill
@@ -344,6 +364,173 @@ def test_no_best_w_hyphen_inserted(tmp_path: Path) -> None:
     assert ws.cell(row=a_row, column=6).alignment.horizontal == "right"
     assert ws.cell(row=a_row, column=9).value == 6
     assert ws.cell(row=a_row, column=9).alignment.horizontal == "right"
+
+
+def test_determine_winning_solvers_3way() -> None:
+    # 1. Highest w* wins alone
+    rec_k = SolverRecord("test", 10, 20, 2, 5, 4, "OPTIMAL", 0.5, 2, "f", True)
+    rec_c3 = SolverRecord("test", 10, 20, 2, 5, 3, "OPTIMAL", 0.2, 1, "f", True)
+    rec_c1 = SolverRecord("test", 10, 20, 2, 5, 3, "TIMEOUT", 1800.0, 1, "f", True)
+    assert determine_winning_solvers({"k": rec_k, "c3": rec_c3, "c1": rec_c1}) == {"k"}
+
+    # 2. Equal optimal w*, both OPTIMAL, runtime within 0.005s -> Tie (both win)
+    rec_k2 = SolverRecord("test", 10, 20, 2, 5, 4, "OPTIMAL", 0.500, 2, "f", True)
+    rec_c32 = SolverRecord("test", 10, 20, 2, 5, 4, "OPTIMAL", 0.502, 2, "f", True)
+    rec_c12 = SolverRecord("test", 10, 20, 2, 5, 4, "OPTIMAL", 2.500, 2, "f", True)
+    assert determine_winning_solvers({"k": rec_k2, "c3": rec_c32, "c1": rec_c12}) == {"k", "c3"}
+
+    # 3. Equal optimal w*, OPTIMAL vs TIMEOUT -> OPTIMAL wins
+    rec_k3 = SolverRecord("test", 10, 20, 2, 5, 4, "TIMEOUT", 1800.0, 2, "f", True)
+    rec_c33 = SolverRecord("test", 10, 20, 2, 5, 4, "OPTIMAL", 10.0, 2, "f", True)
+    rec_c13 = SolverRecord("test", 10, 20, 2, 5, 4, "TIMEOUT", 1800.0, 2, "f", True)
+    assert determine_winning_solvers({"k": rec_k3, "c3": rec_c33, "c1": rec_c13}) == {"c3"}
+
+    # 4. Equal optimal w*, all TIMEOUT -> All with max w* tie for first place
+    rec_k4 = SolverRecord("test", 10, 20, 2, 5, 4, "TIMEOUT", 1800.000, 2, "f", True)
+    rec_c34 = SolverRecord("test", 10, 20, 2, 5, 4, "TIMEOUT", 1800.010, 2, "f", True)
+    rec_c14 = SolverRecord("test", 10, 20, 2, 5, 3, "TIMEOUT", 1800.040, 1, "f", True)
+    assert determine_winning_solvers({"k": rec_k4, "c3": rec_c34, "c1": rec_c14}) == {"k", "c3"}
+
+    # 5. All TIMEOUT with optimal_w is None -> Empty set (no winners, no bolding)
+    rec_none1 = SolverRecord("test", 10, 20, 2, 5, None, "TIMEOUT", 1800.0, 1, "f", False)
+    rec_none2 = SolverRecord("test", 10, 20, 2, 5, None, "TIMEOUT", 1800.2, 1, "f", False)
+    rec_none3 = SolverRecord("test", 10, 20, 2, 5, None, "TIMEOUT", 1800.1, 1, "f", False)
+    assert determine_winning_solvers({"k": rec_none1, "c3": rec_none2, "c1": rec_none3}) == set()
+
+
+def test_generate_excel_comparison_3way(tmp_path: Path) -> None:
+    kissat_csv = tmp_path / "kissat_summary.csv"
+    cadical300_csv = tmp_path / "cadical300_summary.csv"
+    cadical121_csv = tmp_path / "cadical121_summary.csv"
+    kissat_csv.write_text(SAMPLE_KISSAT_CSV)
+    cadical300_csv.write_text(SAMPLE_CADICAL300_CSV)
+    cadical121_csv.write_text(SAMPLE_CADICAL_CSV)
+
+    out_xlsx = tmp_path / "3way_comparison.xlsx"
+    generate_excel_comparison(
+        kissat404_files={"f": kissat_csv},
+        cadical300_files={"f": cadical300_csv},
+        cadical121_files={"f": cadical121_csv},
+        output_xlsx=out_xlsx,
+    )
+
+    assert out_xlsx.exists()
+    wb = openpyxl.load_workbook(out_xlsx)
+    assert "Comparison" in wb.sheetnames
+    assert "Kissat_4.0.4_f" in wb.sheetnames
+    assert "CaDiCaL_3.0.0_f" in wb.sheetnames
+    assert "CaDiCal_1.2.1_f" in wb.sheetnames
+
+    ws = wb["Comparison"]
+    # Check Tier 1 headers: 5 metadata + 3 * 3 = 14 columns
+    assert ws["A1"].value == "Instance Metadata"
+    assert ws["F1"].value == "Kissat 4.0.4 (f)"
+    assert ws["I1"].value == "CaDiCaL 3.0.0 (f)"
+    assert ws["L1"].value == "CaDiCal 1.2.1 (f)"
+
+    # Check Tier 2 headers
+    assert ws["F2"].value == "Optimal w"
+    assert ws["I2"].value == "Optimal w"
+    assert ws["L2"].value == "Optimal w"
+
+    # Row 3 (A-pores_1.mtx.rnd): Kissat (0.450s) and CaDiCaL300 (0.452s) tie within 0.005s -> both bold!
+    # CaDiCaL121 (23.37s) is NOT bold.
+    pores_row = None
+    for r in range(3, ws.max_row + 1):
+        if ws.cell(row=r, column=1).value == "A-pores_1.mtx.rnd":
+            pores_row = r
+            break
+    assert pores_row is not None
+    # Kissat (cols 6,7,8) bold
+    for col in (6, 7, 8):
+        assert ws.cell(row=pores_row, column=col).font.bold is True
+    # CaDiCaL 3.0.0 (cols 9,10,11) bold
+    for col in (9, 10, 11):
+        assert ws.cell(row=pores_row, column=col).font.bold is True
+    # CaDiCaL 1.2.1 (cols 12,13,14) NOT bold
+    for col in (12, 13, 14):
+        assert ws.cell(row=pores_row, column=col).font.bold is False
+
+
+def test_generate_excel_comparison_dynamic_2way(tmp_path: Path) -> None:
+    kissat_csv = tmp_path / "kissat_summary.csv"
+    cadical300_csv = tmp_path / "cadical300_summary.csv"
+    kissat_csv.write_text(SAMPLE_KISSAT_CSV)
+    cadical300_csv.write_text(SAMPLE_CADICAL300_CSV)
+
+    out_xlsx = tmp_path / "2way_dynamic.xlsx"
+    generate_excel_comparison(
+        kissat404_files={"f": kissat_csv},
+        cadical300_files={"f": cadical300_csv},
+        output_xlsx=out_xlsx,
+    )
+    assert out_xlsx.exists()
+    wb = openpyxl.load_workbook(out_xlsx)
+    ws = wb["Comparison"]
+    # 5 metadata + 2 * 3 = 11 columns
+    assert ws["A1"].value == "Instance Metadata"
+    assert ws["F1"].value == "Kissat 4.0.4 (f)"
+    assert ws["I1"].value == "CaDiCaL 3.0.0 (f)"
+    assert ws["L1"].value is None
+
+
+def test_cli_3way_arguments(tmp_path: Path) -> None:
+    kissat_csv = tmp_path / "kissat_f.csv"
+    cadical300_csv = tmp_path / "cadical300_f.csv"
+    cadical121_csv = tmp_path / "cadical121_f.csv"
+    kissat_csv.write_text(SAMPLE_KISSAT_CSV)
+    cadical300_csv.write_text(SAMPLE_CADICAL300_CSV)
+    cadical121_csv.write_text(SAMPLE_CADICAL_CSV)
+
+    out_xlsx = tmp_path / "cli_3way.xlsx"
+
+    test_args = [
+        "--kissat404-f", str(kissat_csv),
+        "--cadical300-f", str(cadical300_csv),
+        "--cadical121-f", str(cadical121_csv),
+        "-o", str(out_xlsx),
+    ]
+
+    import sys
+    orig_argv = sys.argv
+    try:
+        sys.argv = ["excel_comparator.py"] + test_args
+        assert main() == 0
+        assert out_xlsx.exists()
+    finally:
+        sys.argv = orig_argv
+
+
+def test_cli_directory_discovery_3way(tmp_path: Path) -> None:
+    k_dir = tmp_path / "kissat_runs" / "f"
+    c3_dir = tmp_path / "cadical300_runs" / "f"
+    c1_dir = tmp_path / "cadical121_runs" / "f"
+    k_dir.mkdir(parents=True)
+    c3_dir.mkdir(parents=True)
+    c1_dir.mkdir(parents=True)
+
+    (k_dir / "summary.csv").write_text(SAMPLE_KISSAT_CSV)
+    (c3_dir / "summary.csv").write_text(SAMPLE_CADICAL300_CSV)
+    (c1_dir / "summary.csv").write_text(SAMPLE_CADICAL_CSV)
+
+    out_xlsx = tmp_path / "cli_dirs.xlsx"
+
+    test_args = [
+        "--kissat404-dir", str(tmp_path / "kissat_runs"),
+        "--cadical300-dir", str(tmp_path / "cadical300_runs"),
+        "--cadical121-dir", str(tmp_path / "cadical121_runs"),
+        "-o", str(out_xlsx),
+    ]
+
+    import sys
+    orig_argv = sys.argv
+    try:
+        sys.argv = ["excel_comparator.py"] + test_args
+        assert main() == 0
+        assert out_xlsx.exists()
+    finally:
+        sys.argv = orig_argv
+
 
 
 

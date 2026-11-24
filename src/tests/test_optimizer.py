@@ -412,3 +412,29 @@ def test_optimizer_deducts_encoding_time_from_step_budget(
     assert captured_timeouts[0] <= 10.0
 
 
+def test_optimizer_cadical300_linear_search() -> None:
+    # Path P4: 1 - 2 - 3 - 4. Known optimal bandwidth AB(P4) = 2.
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    optimizer = ABPOptimizer(solver_name="cadical300")
+    assert optimizer.solver_name == "cadical300"
+    assert optimizer.solver.solver_name == "cadical300"
+
+    res = optimizer.linear_search(g, start_w=2)
+    assert res.status == "OPTIMAL"
+    assert res.optimal_w == 2
+    assert res.optimal_labeling is not None
+    is_valid, err_msg = verify_solution(g, res.optimal_labeling, 2)
+    assert is_valid, err_msg
+
+
+def test_optimizer_solver_name_forwarding() -> None:
+    opt_k = ABPOptimizer()
+    assert opt_k.solver_name == "kissat404"
+    assert opt_k.solver.solver_name == "kissat404"
+
+    opt_c = ABPOptimizer(solver_name="cadical300")
+    assert opt_c.solver_name == "cadical300"
+    assert opt_c.solver.solver_name == "cadical300"
+
+
+

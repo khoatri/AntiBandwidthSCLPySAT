@@ -35,6 +35,42 @@ class SolverRecord:
     verified: bool
 
 
+@dataclass(frozen=True)
+class SolverSpec:
+    """Configuration specification for a benchmarked solver backend."""
+
+    key: str
+    display_name: str
+    sheet_prefix: str
+    tier1_key: str
+    tier2_key: str
+
+
+SOLVER_SPECS: List[SolverSpec] = [
+    SolverSpec(
+        key="kissat404",
+        display_name="Kissat 4.0.4",
+        sheet_prefix="Kissat_4.0.4",
+        tier1_key="kissat_tier1",
+        tier2_key="kissat_tier2",
+    ),
+    SolverSpec(
+        key="cadical300",
+        display_name="CaDiCaL 3.0.0",
+        sheet_prefix="CaDiCaL_3.0.0",
+        tier1_key="cadical300_tier1",
+        tier2_key="cadical300_tier2",
+    ),
+    SolverSpec(
+        key="cadical121",
+        display_name="CaDiCal 1.2.1",
+        sheet_prefix="CaDiCal_1.2.1",
+        tier1_key="cadical_tier1",
+        tier2_key="cadical_tier2",
+    ),
+]
+
+
 def natural_sort_key(s: str) -> list[Any]:
     """Helper for natural alphanumeric sorting (e.g. file_2 before file_10)."""
     return [
@@ -91,68 +127,75 @@ def load_csv(csv_path: Optional[Path]) -> Dict[str, SolverRecord]:
     return records
 
 
+def determine_winning_solvers(
+    records: Dict[str, Optional[SolverRecord]],
+) -> Set[str]:
+    """Determine which solver(s) achieved the winning result for an instance.
+
+    Criteria:
+    1. Zero-Solution Rule: If NO solver found a feasible labeling (all optimal_w is None),
+       neither solver demonstrated superiority -> returns empty set () (NO cells bolded).
+    2. Bandwidth Superiority: Higher optimal_w is strictly better.
+    3. Status Superiority: Proving OPTIMAL beats TIMEOUT/MEMOUT/UNSAT_START/ERROR when optimal_w is equal.
+    4. Runtime Tie-Breaker: When multiple solvers are OPTIMAL with identical optimal_w,
+       the solver with faster runtime is strictly better if delta_t > 0.005s.
+       If delta_t <= 0.005s, they tie for first place.
+    5. Timeout Ties: If multiple solvers tie at the highest optimal_w with TIMEOUT status,
+       runtime does NOT break the tie (arbitrary teardown noise) -> all tie for first place.
+    6. Multi-Winner Rule: All solvers tying for the best rank are included in the returned set.
+
+    Returns:
+        Set of winning solver keys (e.g. {"kissat404"}, {"cadical300", "kissat404"}, or set()).
+    """
+    valid = {k: r for k, r in records.items() if r is not None}
+    if not valid:
+        return set()
+
+    # If all solvers have optimal_w is None, no feasible solution was found by any solver
+    # -> No winner, no bolding.
+    has_feasible = any(r.optimal_w is not None for r in valid.values())
+    if not has_feasible:
+        # Check if anyone proved OPTIMAL (e.g. UNSAT proof)
+        has_optimal = any(r.status == "OPTIMAL" for r in valid.values())
+        if not has_optimal:
+            return set()
+
+    max_w = max(r.optimal_w if r.optimal_w is not None else -1 for r in valid.values())
+    cands = [k for k, r in valid.items() if (r.optimal_w if r.optimal_w is not None else -1) == max_w]
+
+    # Check status among top candidates
+    opt_cands = [k for k in cands if valid[k].status == "OPTIMAL"]
+    if opt_cands:
+        # Runtime tie-breaker strictly among OPTIMAL candidates
+        times = {
+            k: valid[k].total_time_s
+            for k in opt_cands
+            if valid[k].total_time_s is not None
+        }
+        if times:
+            min_t = min(times.values())
+            # All solvers within 0.005s margin of fastest tie for first place
+            return {k for k, t in times.items() if abs(t - min_t) <= 0.005}
+        return set(opt_cands)
+
+    if max_w == -1:
+        return set()
+
+    # None is OPTIMAL; all solvers reaching max_w (e.g. TIMEOUT at same w*) tie
+    return set(cands)
+
+
 def determine_better_solver(
     k: Optional[SolverRecord], c: Optional[SolverRecord]
 ) -> Optional[str]:
-    """Determine which solver achieved the better result for an instance.
-
-    Criteria:
-    1. Strict Timeout Tie Rule: If both solvers timed out (TIMEOUT) at the same
-       optimal_w (or neither found any SAT step), it is a tie -> neither solver
-       is better (returns None, meaning NO cells are bolded).
-    2. Bandwidth Superiority: The solver with strictly larger optimal_w is better.
-    3. Status Superiority: Proving OPTIMAL beats TIMEOUT/MEMOUT when optimal_w is equal.
-    4. Runtime Tie-Breaker: When both are OPTIMAL with identical optimal_w, the solver
-       with faster runtime is better (if runtime difference > 0.005s).
+    """Determine which single solver is strictly better between Kissat and CaDiCaL.
 
     Returns:
-        "Kissat", "CaDiCal", or None.
+        "Kissat", "CaDiCal", or None (if tie or neither found solution).
     """
-    if not k or not c:
-        if k and not c:
-            return "Kissat"
-        if c and not k:
-            return "CaDiCal"
-        return None
-
-    kw = k.optimal_w
-    cw = c.optimal_w
-
-    k_to = (k.status == "TIMEOUT")
-    c_to = (c.status == "TIMEOUT")
-
-    # 1. Strict Timeout Tie Rule: Both TIMEOUT with identical w* -> NO winner / tie
-    if k_to and c_to and kw == cw:
-        return None
-
-    # 2. Bandwidth Superiority: Larger w* is strictly better
-    if kw is not None and cw is not None:
-        if kw > cw:
-            return "Kissat"
-        elif cw > kw:
-            return "CaDiCal"
-    elif kw is not None and cw is None:
-        return "Kissat"
-    elif cw is not None and kw is None:
-        return "CaDiCal"
-
-    # 3. Status Superiority: Both w* equal (or both None)
-    k_opt = (k.status == "OPTIMAL")
-    c_opt = (c.status == "OPTIMAL")
-
-    if k_opt and not c_opt:
-        return "Kissat"
-    elif c_opt and not k_opt:
-        return "CaDiCal"
-
-    # 4. Runtime Tie-Breaker: Both OPTIMAL with identical w* -> Faster runtime is better
-    if k_opt and c_opt:
-        kt = k.total_time_s
-        ct = c.total_time_s
-        if kt is not None and ct is not None:
-            if abs(kt - ct) > 0.005:
-                return "Kissat" if kt < ct else "CaDiCal"
-
+    winners = determine_winning_solvers({"Kissat": k, "CaDiCal": c})
+    if len(winners) == 1:
+        return next(iter(winners))
     return None
 
 
@@ -161,23 +204,21 @@ def determine_bold_cells(
 ) -> Tuple[Set[str], Set[str]]:
     """Determine which cells (if any) should be bolded between Kissat and CaDiCaL.
 
-    When a solver wins an instance, all three of its cells ('optimal_w', 'time',
-    'status') are bolded. On ties or timeout ties with identical w*, NO cells
-    are bolded.
+    When a solver ties for first place, its cells are bolded. When no solver
+    found a solution, no cells are bolded.
 
     Returns:
         (bold_fields_kissat, bold_fields_cadical)
     """
-    winner = determine_better_solver(k, c)
-    if winner == "Kissat":
-        return ({"optimal_w", "time", "status"}, set())
-    elif winner == "CaDiCal":
-        return (set(), {"optimal_w", "time", "status"})
-    return (set(), set())
+    winners = determine_winning_solvers({"Kissat": k, "CaDiCal": c})
+    bold_fields = {"optimal_w", "time", "status"}
+    bold_k = bold_fields if "Kissat" in winners else set()
+    bold_c = bold_fields if "CaDiCal" in winners else set()
+    return (bold_k, bold_c)
 
 
 # Pastel Color Palette for Cross-Solver Comparison (8-char ARGB hex for LibreOffice compatibility)
-# Zero grayish tones: warm pastels for metadata, colorful pastels for symmetry modes.
+# Zero grayish tones: warm pastels for metadata, colorful pastels for symmetry modes and solvers.
 PASTEL_PALETTE = {
     "metadata": {
         "tier1_fill": "FFFFF9C4",  # Warm Pastel Butter / Cream
@@ -188,49 +229,57 @@ PASTEL_PALETTE = {
     "f": {
         "kissat_tier1": "FFA9DFBF",  # Pastel Mint Green
         "kissat_tier2": "FFD4EFDF",
-        "cadical_tier1": "FFA2D9CE", # Pastel Aqua / Teal
+        "cadical300_tier1": "FFFAD7A0",  # Pastel Apricot / Warm Amber
+        "cadical300_tier2": "FFFDEBD0",
+        "cadical_tier1": "FFA2D9CE",  # Pastel Aqua / Teal
         "cadical_tier2": "FFD1F2EB",
         "font": "FF145A32",
     },
     "h": {
         "kissat_tier1": "FFFAD7A0",  # Pastel Apricot
         "kissat_tier2": "FFFDEBD0",
-        "cadical_tier1": "FFEDBB99", # Pastel Coral / Peach
+        "cadical300_tier1": "FFAED6F1",  # Pastel Sky Blue
+        "cadical300_tier2": "FFD6EAF8",
+        "cadical_tier1": "FFEDBB99",  # Pastel Coral / Peach
         "cadical_tier2": "FFFBEEE6",
         "font": "FF6E2C00",
     },
     "n": {
         "kissat_tier1": "FFAED6F1",  # Pastel Sky Blue
         "kissat_tier2": "FFD6EAF8",
-        "cadical_tier1": "FFD2B4DE", # Pastel Lavender Blue
+        "cadical300_tier1": "FFA9DFBF",  # Pastel Mint
+        "cadical300_tier2": "FFD4EFDF",
+        "cadical_tier1": "FFD2B4DE",  # Pastel Lavender Blue
         "cadical_tier2": "FFE8DAEF",
         "font": "FF1B4F72",
     },
     "l": {
         "kissat_tier1": "FFD7BDE2",  # Pastel Lilac
         "kissat_tier2": "FFE8DAEF",
-        "cadical_tier1": "FFF5CBA7", # Pastel Cantaloupe
+        "cadical300_tier1": "FFA2D9CE",  # Pastel Aqua
+        "cadical300_tier2": "FFD1F2EB",
+        "cadical_tier1": "FFF5CBA7",  # Pastel Cantaloupe
         "cadical_tier2": "FFFBEEE6",
         "font": "FF512E5F",
     },
 }
 
 STATUS_PASTEL_FILLS = {
-    "OPTIMAL": "FFD4EFDF",   # Soft Pastel Green
-    "TIMEOUT": "FFFADBD8",   # Soft Pastel Rose
-    "MEMOUT": "FFFCF3CF",    # Soft Pastel Amber
-    "UNSAT": "FFE8DAEF",     # Soft Pastel Violet
-    "UNSAT_START": "FFE8DAEF", # Soft Pastel Violet
-    "ERROR": "FFF5C6CB",     # Soft Pastel Coral / Red
+    "OPTIMAL": "FFD4EFDF",      # Soft Pastel Green
+    "TIMEOUT": "FFFADBD8",      # Soft Pastel Rose
+    "MEMOUT": "FFFCF3CF",       # Soft Pastel Amber
+    "UNSAT": "FFE8DAEF",        # Soft Pastel Violet
+    "UNSAT_START": "FFE8DAEF",  # Soft Pastel Violet
+    "ERROR": "FFF5C6CB",        # Soft Pastel Coral / Red
 }
 
 STATUS_FONTS = {
-    "OPTIMAL": "FF196F3D",   # Dark Forest Green
-    "TIMEOUT": "FF922B21",   # Dark Wine Red
-    "MEMOUT": "FF7D6608",    # Dark Ochre
-    "UNSAT": "FF5B2C6F",     # Deep Plum
-    "UNSAT_START": "FF5B2C6F", # Deep Plum
-    "ERROR": "FF721C24",     # Dark Coral Red
+    "OPTIMAL": "FF196F3D",      # Dark Forest Green
+    "TIMEOUT": "FF922B21",      # Dark Wine Red
+    "MEMOUT": "FF7D6608",       # Dark Ochre
+    "UNSAT": "FF5B2C6F",        # Deep Plum
+    "UNSAT_START": "FF5B2C6F",  # Deep Plum
+    "ERROR": "FF721C24",        # Dark Coral Red
 }
 
 
@@ -327,39 +376,59 @@ def _format_replica_sheet(
 
 
 def generate_excel_comparison(
-    kissat_files: Dict[str, Optional[Path]],
-    cadical_files: Dict[str, Optional[Path]],
-    output_xlsx: Path,
+    kissat404_files: Optional[Dict[str, Optional[Path]]] = None,
+    cadical300_files: Optional[Dict[str, Optional[Path]]] = None,
+    cadical121_files: Optional[Dict[str, Optional[Path]]] = None,
+    output_xlsx: Path = Path("AntiBandwidth_Comparison.xlsx"),
     sheet_title: str = "Comparison",
+    *,
+    kissat_files: Optional[Dict[str, Optional[Path]]] = None,
+    cadical_files: Optional[Dict[str, Optional[Path]]] = None,
+    solver_files: Optional[Dict[str, Dict[str, Optional[Path]]]] = None,
 ) -> None:
-    """Build and format the cross-solver comparison workbook."""
-    # 1. Identify active modes
+    """Build and format the cross-solver comparison workbook supporting 1, 2, or 3 solvers."""
+    # Resolve aliases
+    k4_files = kissat404_files if kissat404_files is not None else kissat_files or {}
+    c3_files = cadical300_files or {}
+    c1_files = cadical121_files if cadical121_files is not None else cadical_files or {}
+
+    raw_solvers: Dict[str, Dict[str, Optional[Path]]] = {
+        "kissat404": k4_files,
+        "cadical300": c3_files,
+        "cadical121": c1_files,
+    }
+    if solver_files is not None:
+        raw_solvers.update(solver_files)
+
+    # 1. Identify active modes and active solvers per mode
     active_modes: List[str] = []
-    kissat_data: Dict[str, Dict[str, SolverRecord]] = {}
-    cadical_data: Dict[str, Dict[str, SolverRecord]] = {}
+    solver_data: Dict[str, Dict[str, Dict[str, SolverRecord]]] = {s.key: {} for s in SOLVER_SPECS}
+    active_solvers_by_mode: Dict[str, List[SolverSpec]] = {}
 
     all_instances_set: Set[str] = set()
     instance_meta: Dict[str, Tuple[int, int, Optional[int], Optional[int]]] = {}
 
     for mode in ["f", "h", "n", "l"]:
-        kf = kissat_files.get(mode)
-        cf = cadical_files.get(mode)
-        has_k = kf is not None and kf.is_file()
-        has_c = cf is not None and cf.is_file()
-        if has_k or has_c:
-            active_modes.append(mode)
-            kissat_data[mode] = load_csv(kf) if has_k else {}
-            cadical_data[mode] = load_csv(cf) if has_c else {}
+        active_in_mode: List[SolverSpec] = []
+        for spec in SOLVER_SPECS:
+            fpath = raw_solvers.get(spec.key, {}).get(mode)
+            if fpath is not None and fpath.is_file():
+                active_in_mode.append(spec)
+                data = load_csv(fpath)
+                solver_data[spec.key][mode] = data
+                for rec in data.values():
+                    all_instances_set.add(rec.instance)
+                    if rec.instance not in instance_meta or instance_meta[rec.instance][0] == 0:
+                        instance_meta[rec.instance] = (
+                            rec.n,
+                            rec.m,
+                            rec.lower_bound,
+                            rec.upper_bound,
+                        )
 
-            for rec in list(kissat_data[mode].values()) + list(cadical_data[mode].values()):
-                all_instances_set.add(rec.instance)
-                if rec.instance not in instance_meta or instance_meta[rec.instance][0] == 0:
-                    instance_meta[rec.instance] = (
-                        rec.n,
-                        rec.m,
-                        rec.lower_bound,
-                        rec.upper_bound,
-                    )
+        if active_in_mode:
+            active_modes.append(mode)
+            active_solvers_by_mode[mode] = active_in_mode
 
     if not active_modes:
         raise ValueError("No valid Kissat or CaDiCaL CSV input files were provided.")
@@ -384,13 +453,13 @@ def generate_excel_comparison(
     )
 
     # 2. Build Header Row 1 (Tier 1 Merged Headers)
-    # Col A-E: Instance Metadata
     meta_pal = PASTEL_PALETTE["metadata"]
     meta_tier1_font = Font(name=font_family, size=11, bold=True, color=meta_pal["tier1_font"])
     meta_tier1_fill = PatternFill(
         start_color=meta_pal["tier1_fill"], end_color=meta_pal["tier1_fill"], fill_type="solid"
     )
 
+    # Col 1-5: Instance Metadata
     ws.merge_cells("A1:E1")
     cell_meta = ws["A1"]
     cell_meta.value = "Instance Metadata"
@@ -402,55 +471,11 @@ def generate_excel_comparison(
         ws.cell(row=1, column=c).border = thin_border
         ws.cell(row=1, column=c).fill = meta_tier1_fill
 
-    col_idx = 6
-    for mode in active_modes:
-        pal = PASTEL_PALETTE.get(mode, meta_pal)
-        k_tier1_font = Font(name=font_family, size=11, bold=True, color=pal["font"])
-        k_tier1_fill = PatternFill(
-            start_color=pal["kissat_tier1"], end_color=pal["kissat_tier1"], fill_type="solid"
-        )
-        c_tier1_font = Font(name=font_family, size=11, bold=True, color=pal["font"])
-        c_tier1_fill = PatternFill(
-            start_color=pal["cadical_tier1"], end_color=pal["cadical_tier1"], fill_type="solid"
-        )
-
-        # Kissat 4.0.4 (mode): 3 columns
-        k_start = col_idx
-        k_end = col_idx + 2
-        ws.merge_cells(
-            start_row=1, start_column=k_start, end_row=1, end_column=k_end
-        )
-        k_cell = ws.cell(row=1, column=k_start)
-        k_cell.value = f"Kissat 4.0.4 ({mode})"
-        k_cell.font = k_tier1_font
-        k_cell.alignment = Alignment(horizontal="center", vertical="center")
-        for c in range(k_start, k_end + 1):
-            ws.cell(row=1, column=c).border = thin_border
-            ws.cell(row=1, column=c).fill = k_tier1_fill
-
-        # CaDiCal 1.2.1 (mode): 3 columns
-        c_start = col_idx + 3
-        c_end = col_idx + 5
-        ws.merge_cells(
-            start_row=1, start_column=c_start, end_row=1, end_column=c_end
-        )
-        c_cell = ws.cell(row=1, column=c_start)
-        c_cell.value = f"CaDiCal 1.2.1 ({mode})"
-        c_cell.font = c_tier1_font
-        c_cell.alignment = Alignment(horizontal="center", vertical="center")
-        for c in range(c_start, c_end + 1):
-            ws.cell(row=1, column=c).border = thin_border
-            ws.cell(row=1, column=c).fill = c_tier1_fill
-
-        col_idx += 6
-
-    # 3. Build Header Row 2 (Tier 2 Column Headers)
-    # Strict order: Optimal w before Time (s) before Status
+    # Header Row 2: Col 1-5 Metadata
     meta_tier2_font = Font(name=font_family, size=10, bold=True, color=meta_pal["tier2_font"])
     meta_tier2_fill = PatternFill(
         start_color=meta_pal["tier2_fill"], end_color=meta_pal["tier2_fill"], fill_type="solid"
     )
-
     tier2_metadata = ["Instance", "n", "m", "Lower Bound", "Upper Bound"]
     for c_idx, h_text in enumerate(tier2_metadata, start=1):
         cell = ws.cell(row=2, column=c_idx)
@@ -460,39 +485,50 @@ def generate_excel_comparison(
         cell.fill = meta_tier2_fill
         cell.border = thin_border
 
-    c_cur = 6
+    # Build Solver Headers per Active Mode
+    col_idx = 6
     for mode in active_modes:
         pal = PASTEL_PALETTE.get(mode, meta_pal)
-        k_tier2_font = Font(name=font_family, size=10, bold=True, color=pal["font"])
-        k_tier2_fill = PatternFill(
-            start_color=pal["kissat_tier2"], end_color=pal["kissat_tier2"], fill_type="solid"
-        )
-        c_tier2_font = Font(name=font_family, size=10, bold=True, color=pal["font"])
-        c_tier2_fill = PatternFill(
-            start_color=pal["cadical_tier2"], end_color=pal["cadical_tier2"], fill_type="solid"
-        )
+        active_specs = active_solvers_by_mode[mode]
 
-        # Kissat: Optimal w, Time (s), Status
-        for sub_idx, sub_name in enumerate(["Optimal w", "Time (s)", "Status"]):
-            cell = ws.cell(row=2, column=c_cur + sub_idx)
-            cell.value = sub_name
-            cell.font = k_tier2_font
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.fill = k_tier2_fill
-            cell.border = thin_border
+        for spec in active_specs:
+            s_tier1_font = Font(name=font_family, size=11, bold=True, color=pal["font"])
+            s_tier1_fill = PatternFill(
+                start_color=pal[spec.tier1_key], end_color=pal[spec.tier1_key], fill_type="solid"
+            )
+            s_tier2_font = Font(name=font_family, size=10, bold=True, color=pal["font"])
+            s_tier2_fill = PatternFill(
+                start_color=pal[spec.tier2_key], end_color=pal[spec.tier2_key], fill_type="solid"
+            )
 
-        # CaDiCal: Optimal w, Time (s), Status
-        for sub_idx, sub_name in enumerate(["Optimal w", "Time (s)", "Status"]):
-            cell = ws.cell(row=2, column=c_cur + 3 + sub_idx)
-            cell.value = sub_name
-            cell.font = c_tier2_font
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.fill = c_tier2_fill
-            cell.border = thin_border
+            # Tier 1 (Row 1): 3 columns merged
+            s_start = col_idx
+            s_end = col_idx + 2
+            ws.merge_cells(
+                start_row=1, start_column=s_start, end_row=1, end_column=s_end
+            )
+            s_cell = ws.cell(row=1, column=s_start)
+            s_cell.value = f"{spec.display_name} ({mode})"
+            s_cell.font = s_tier1_font
+            s_cell.alignment = Alignment(horizontal="center", vertical="center")
+            for c in range(s_start, s_end + 1):
+                ws.cell(row=1, column=c).border = thin_border
+                ws.cell(row=1, column=c).fill = s_tier1_fill
 
-        c_cur += 6
+            # Tier 2 (Row 2): Optimal w, Time (s), Status
+            for sub_idx, sub_name in enumerate(["Optimal w", "Time (s)", "Status"]):
+                cell = ws.cell(row=2, column=s_start + sub_idx)
+                cell.value = sub_name
+                cell.font = s_tier2_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.fill = s_tier2_fill
+                cell.border = thin_border
 
-    # 4. Fill Data Rows
+            col_idx += 3
+
+    total_cols = col_idx - 1
+
+    # 3. Fill Data Rows
     for r_offset, inst in enumerate(sorted_instances):
         row_num = 3 + r_offset
         meta = instance_meta.get(inst, (0, 0, None, None))
@@ -512,107 +548,66 @@ def generate_excel_comparison(
             cell.alignment = Alignment(horizontal="right", vertical="center")
             cell.border = thin_border
 
-        current_col = 6
+        curr_c = 6
         for mode in active_modes:
-            k_rec = kissat_data[mode].get(inst)
-            c_rec = cadical_data[mode].get(inst)
-            winner = determine_better_solver(k_rec, c_rec)
-            k_is_better = (winner == "Kissat")
-            c_is_better = (winner == "CaDiCal")
+            active_specs = active_solvers_by_mode[mode]
+            mode_records: Dict[str, Optional[SolverRecord]] = {
+                spec.key: solver_data[spec.key][mode].get(inst)
+                for spec in active_specs
+            }
+            winners = determine_winning_solvers(mode_records)
 
-            # Kissat columns: Optimal w, Time (s), Status
-            # Optimal w
-            k_opt_val = k_rec.optimal_w if (k_rec and k_rec.optimal_w is not None) else "-"
-            k_opt_cell = ws.cell(row=row_num, column=current_col)
-            k_opt_cell.value = k_opt_val
-            k_opt_cell.font = bold_font if k_is_better else regular_font
-            k_opt_cell.alignment = Alignment(
-                horizontal="right" if k_opt_val != "-" else "center",
-                vertical="center",
-            )
-            k_opt_cell.border = thin_border
+            for spec in active_specs:
+                rec = mode_records[spec.key]
+                is_winner = spec.key in winners
 
-            # Time (s)
-            k_time_cell = ws.cell(row=row_num, column=current_col + 1)
-            if k_rec and k_rec.total_time_s is not None:
-                k_time_cell.value = k_rec.total_time_s
-                k_time_cell.number_format = "0.000"
-            else:
-                k_time_cell.value = ""
-            k_time_cell.font = bold_font if k_is_better else regular_font
-            k_time_cell.alignment = Alignment(horizontal="right", vertical="center")
-            k_time_cell.border = thin_border
-
-            # Status (pastel badge)
-            k_status_cell = ws.cell(row=row_num, column=current_col + 2)
-            k_status_val = k_rec.status if k_rec else ""
-            k_status_cell.value = k_status_val
-            k_status_cell.alignment = Alignment(horizontal="center", vertical="center")
-            k_status_cell.border = thin_border
-            if k_status_val in STATUS_PASTEL_FILLS:
-                k_status_cell.fill = PatternFill(
-                    start_color=STATUS_PASTEL_FILLS[k_status_val],
-                    end_color=STATUS_PASTEL_FILLS[k_status_val],
-                    fill_type="solid",
+                # Col 1: Optimal w
+                opt_val = rec.optimal_w if (rec and rec.optimal_w is not None) else "-"
+                opt_cell = ws.cell(row=row_num, column=curr_c)
+                opt_cell.value = opt_val
+                opt_cell.font = bold_font if is_winner else regular_font
+                opt_cell.alignment = Alignment(
+                    horizontal="right" if opt_val != "-" else "center",
+                    vertical="center",
                 )
-                k_status_cell.font = Font(
-                    name=font_family,
-                    size=10,
-                    bold=k_is_better,
-                    color=STATUS_FONTS.get(k_status_val, "FF000000"),
-                )
-            else:
-                k_status_cell.font = bold_font if k_is_better else regular_font
+                opt_cell.border = thin_border
 
-            # CaDiCal columns: Optimal w, Time (s), Status
-            # Optimal w
-            c_opt_val = c_rec.optimal_w if (c_rec and c_rec.optimal_w is not None) else "-"
-            c_opt_cell = ws.cell(row=row_num, column=current_col + 3)
-            c_opt_cell.value = c_opt_val
-            c_opt_cell.font = bold_font if c_is_better else regular_font
-            c_opt_cell.alignment = Alignment(
-                horizontal="right" if c_opt_val != "-" else "center",
-                vertical="center",
-            )
-            c_opt_cell.border = thin_border
+                # Col 2: Time (s)
+                time_cell = ws.cell(row=row_num, column=curr_c + 1)
+                if rec and rec.total_time_s is not None:
+                    time_cell.value = rec.total_time_s
+                    time_cell.number_format = "0.000"
+                else:
+                    time_cell.value = ""
+                time_cell.font = bold_font if is_winner else regular_font
+                time_cell.alignment = Alignment(horizontal="right", vertical="center")
+                time_cell.border = thin_border
 
-            # Time (s)
-            c_time_cell = ws.cell(row=row_num, column=current_col + 4)
-            if c_rec and c_rec.total_time_s is not None:
-                c_time_cell.value = c_rec.total_time_s
-                c_time_cell.number_format = "0.000"
-            else:
-                c_time_cell.value = ""
-            c_time_cell.font = bold_font if c_is_better else regular_font
-            c_time_cell.alignment = Alignment(horizontal="right", vertical="center")
-            c_time_cell.border = thin_border
+                # Col 3: Status
+                status_cell = ws.cell(row=row_num, column=curr_c + 2)
+                status_val = rec.status if rec else ""
+                status_cell.value = status_val
+                status_cell.alignment = Alignment(horizontal="center", vertical="center")
+                status_cell.border = thin_border
+                if status_val in STATUS_PASTEL_FILLS:
+                    status_cell.fill = PatternFill(
+                        start_color=STATUS_PASTEL_FILLS[status_val],
+                        end_color=STATUS_PASTEL_FILLS[status_val],
+                        fill_type="solid",
+                    )
+                    status_cell.font = Font(
+                        name=font_family,
+                        size=10,
+                        bold=is_winner,
+                        color=STATUS_FONTS.get(status_val, "FF000000"),
+                    )
+                else:
+                    status_cell.font = bold_font if is_winner else regular_font
 
-            # Status (pastel badge)
-            c_status_cell = ws.cell(row=row_num, column=current_col + 5)
-            c_status_val = c_rec.status if c_rec else ""
-            c_status_cell.value = c_status_val
-            c_status_cell.alignment = Alignment(horizontal="center", vertical="center")
-            c_status_cell.border = thin_border
-            if c_status_val in STATUS_PASTEL_FILLS:
-                c_status_cell.fill = PatternFill(
-                    start_color=STATUS_PASTEL_FILLS[c_status_val],
-                    end_color=STATUS_PASTEL_FILLS[c_status_val],
-                    fill_type="solid",
-                )
-                c_status_cell.font = Font(
-                    name=font_family,
-                    size=10,
-                    bold=c_is_better,
-                    color=STATUS_FONTS.get(c_status_val, "FF000000"),
-                )
-            else:
-                c_status_cell.font = bold_font if c_is_better else regular_font
-
-            current_col += 6
+                curr_c += 3
 
     # Freeze panes at A3
     ws.freeze_panes = "A3"
-    total_cols = 5 + len(active_modes) * 6
     ws.auto_filter.ref = (
         f"A2:{get_column_letter(total_cols)}{2 + len(sorted_instances)}"
     )
@@ -627,24 +622,19 @@ def generate_excel_comparison(
             val_str = str(cell.value or "")
             if len(val_str) > max_len:
                 max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 3, 11)
+        ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
-    # 5. Create 1:1 CSV Replica Sheets
+    # 4. Create 1:1 CSV Replica Sheets
     for mode in active_modes:
         pal = PASTEL_PALETTE.get(mode, meta_pal)
-        kf = kissat_files.get(mode)
-        if kf and kf.is_file():
-            ws_k = wb.create_sheet(title=f"Kissat_4.0.4_{mode}")
-            _format_replica_sheet(
-                ws_k, kf, pal["kissat_tier1"], pal["font"], regular_font, thin_border
-            )
-
-        cf = cadical_files.get(mode)
-        if cf and cf.is_file():
-            ws_c = wb.create_sheet(title=f"CaDiCal_1.2.1_{mode}")
-            _format_replica_sheet(
-                ws_c, cf, pal["cadical_tier1"], pal["font"], regular_font, thin_border
-            )
+        active_specs = active_solvers_by_mode[mode]
+        for spec in active_specs:
+            fpath = raw_solvers.get(spec.key, {}).get(mode)
+            if fpath and fpath.is_file():
+                ws_rep = wb.create_sheet(title=f"{spec.sheet_prefix}_{mode}")
+                _format_replica_sheet(
+                    ws_rep, fpath, pal[spec.tier1_key], pal["font"], regular_font, thin_border
+                )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_xlsx)
@@ -654,34 +644,60 @@ def build_parser() -> argparse.ArgumentParser:
     """Construct CLI argument parser for Excel comparison generator."""
     parser = argparse.ArgumentParser(
         prog="antibandwidth-excel-comparator",
-        description="Generate minimal Excel comparison workbook between Kissat and CaDiCaL",
+        description="Generate Excel comparison workbook between Kissat 4.0.4, CaDiCaL 3.0.0, and CaDiCal 1.2.1",
     )
     # Mode-specific CSV flags
     for mode in ["f", "h", "n", "l"]:
+        # Kissat 4.0.4 flags
         parser.add_argument(
+            f"--kissat404-{mode}",
             f"--kissat-{mode}",
+            dest=f"kissat404_{mode}",
             type=Path,
             default=None,
-            help=f"Path to Kissat summary CSV for mode {mode}",
+            help=f"Path to Kissat 4.0.4 summary CSV for mode {mode}",
         )
+        # CaDiCaL 3.0.0 flags
         parser.add_argument(
-            f"--cadical-{mode}",
+            f"--cadical300-{mode}",
+            dest=f"cadical300_{mode}",
             type=Path,
             default=None,
-            help=f"Path to CaDiCaL summary CSV for mode {mode}",
+            help=f"Path to CaDiCaL 3.0.0 summary CSV for mode {mode}",
+        )
+        # CaDiCal 1.2.1 flags
+        parser.add_argument(
+            f"--cadical121-{mode}",
+            f"--cadical-{mode}",
+            dest=f"cadical121_{mode}",
+            type=Path,
+            default=None,
+            help=f"Path to CaDiCal 1.2.1 summary CSV for mode {mode}",
         )
 
+    # Directory discovery flags
     parser.add_argument(
+        "--kissat404-dir",
         "--kissat-dir",
+        dest="kissat404_dir",
         type=Path,
         default=None,
         help="Directory containing Kissat summary CSVs (e.g. summary_mode_f.csv or f/summary.csv)",
     )
     parser.add_argument(
-        "--cadical-dir",
+        "--cadical300-dir",
+        dest="cadical300_dir",
         type=Path,
         default=None,
-        help="Directory containing CaDiCaL summary CSVs (e.g. cadical_summary_mode_f.csv or f/summary.csv)",
+        help="Directory containing CaDiCaL 3.0.0 summary CSVs (e.g. summary_mode_f.csv or f/summary.csv)",
+    )
+    parser.add_argument(
+        "--cadical121-dir",
+        "--cadical-dir",
+        dest="cadical121_dir",
+        type=Path,
+        default=None,
+        help="Directory containing CaDiCal 1.2.1 summary CSVs (e.g. cadical_summary_mode_f.csv or f/summary.csv)",
     )
     parser.add_argument(
         "-o",
@@ -704,46 +720,66 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    kissat_files: Dict[str, Optional[Path]] = {}
-    cadical_files: Dict[str, Optional[Path]] = {}
+    k4_files: Dict[str, Optional[Path]] = {}
+    c3_files: Dict[str, Optional[Path]] = {}
+    c1_files: Dict[str, Optional[Path]] = {}
 
     for mode in ["f", "h", "n", "l"]:
-        # Direct CLI flag
-        k_path = getattr(args, f"kissat_{mode}")
-        c_path = getattr(args, f"cadical_{mode}")
+        # Direct CLI flags
+        k4_path = getattr(args, f"kissat404_{mode}", None)
+        c3_path = getattr(args, f"cadical300_{mode}", None)
+        c1_path = getattr(args, f"cadical121_{mode}", None)
 
-        # Directory discovery fallback
-        if not k_path and args.kissat_dir and args.kissat_dir.is_dir():
+        # Directory discovery fallback for Kissat 4.0.4
+        if not k4_path and args.kissat404_dir and args.kissat404_dir.is_dir():
             candidates = [
-                args.kissat_dir / f"summary_mode_{mode}.csv",
-                args.kissat_dir / f"kissat_summary_mode_{mode}.csv",
-                args.kissat_dir / f"summary_{mode}.csv",
-                args.kissat_dir / mode / "summary.csv",
+                args.kissat404_dir / f"summary_mode_{mode}.csv",
+                args.kissat404_dir / f"kissat_summary_mode_{mode}.csv",
+                args.kissat404_dir / f"kissat404_summary_mode_{mode}.csv",
+                args.kissat404_dir / f"summary_{mode}.csv",
+                args.kissat404_dir / mode / "summary.csv",
             ]
             for cand in candidates:
                 if cand.is_file():
-                    k_path = cand
+                    k4_path = cand
                     break
 
-        if not c_path and args.cadical_dir and args.cadical_dir.is_dir():
+        # Directory discovery fallback for CaDiCaL 3.0.0
+        if not c3_path and args.cadical300_dir and args.cadical300_dir.is_dir():
             candidates = [
-                args.cadical_dir / f"cadical_summary_mode_{mode}.csv",
-                args.cadical_dir / f"summary_mode_{mode}.csv",
-                args.cadical_dir / f"summary_{mode}.csv",
-                args.cadical_dir / mode / "summary.csv",
+                args.cadical300_dir / f"cadical300_summary_mode_{mode}.csv",
+                args.cadical300_dir / f"summary_mode_{mode}.csv",
+                args.cadical300_dir / f"summary_{mode}.csv",
+                args.cadical300_dir / mode / "summary.csv",
             ]
             for cand in candidates:
                 if cand.is_file():
-                    c_path = cand
+                    c3_path = cand
                     break
 
-        kissat_files[mode] = k_path
-        cadical_files[mode] = c_path
+        # Directory discovery fallback for CaDiCal 1.2.1
+        if not c1_path and args.cadical121_dir and args.cadical121_dir.is_dir():
+            candidates = [
+                args.cadical121_dir / f"cadical_summary_mode_{mode}.csv",
+                args.cadical121_dir / f"cadical121_summary_mode_{mode}.csv",
+                args.cadical121_dir / f"summary_mode_{mode}.csv",
+                args.cadical121_dir / f"summary_{mode}.csv",
+                args.cadical121_dir / mode / "summary.csv",
+            ]
+            for cand in candidates:
+                if cand.is_file():
+                    c1_path = cand
+                    break
+
+        k4_files[mode] = k4_path
+        c3_files[mode] = c3_path
+        c1_files[mode] = c1_path
 
     active_modes = [
         m for m in ["f", "h", "n", "l"]
-        if (kissat_files[m] and kissat_files[m].is_file())
-        or (cadical_files[m] and cadical_files[m].is_file())
+        if (k4_files[m] and k4_files[m].is_file())
+        or (c3_files[m] and c3_files[m].is_file())
+        or (c1_files[m] and c1_files[m].is_file())
     ]
 
     if not active_modes:
@@ -751,8 +787,9 @@ def main() -> int:
         return 1
 
     generate_excel_comparison(
-        kissat_files=kissat_files,
-        cadical_files=cadical_files,
+        kissat404_files=k4_files,
+        cadical300_files=c3_files,
+        cadical121_files=c1_files,
         output_xlsx=args.output_xlsx,
         sheet_title=args.title,
     )

@@ -26,8 +26,13 @@ class ABPOptimizer:
     Supports a total instance timeout, bounding the cumulative time of the search.
     """
 
-    def __init__(self, solver: Optional[ABPSolver] = None) -> None:
-        self.solver = solver if solver is not None else ABPSolver()
+    def __init__(
+        self,
+        solver: Optional[ABPSolver] = None,
+        solver_name: str = "kissat404",
+    ) -> None:
+        self.solver = solver if solver is not None else ABPSolver(solver_name=solver_name)
+        self.solver_name: str = self.solver.solver_name
 
     def linear_search(
         self,

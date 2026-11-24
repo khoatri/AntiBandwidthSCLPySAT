@@ -362,3 +362,34 @@ def test_automation_explicit_start_w_modes(tmp_path: Path) -> None:
     data_default = json.loads((out_dir / "default" / "results" / "A-pores_1.mtx.rnd.json").read_text())
     assert data_default["start_w"] == 6
 
+
+def test_automation_cadical300_campaign(tmp_path: Path) -> None:
+    inst_dir = tmp_path / "instances"
+    inst_dir.mkdir()
+    out_dir = tmp_path / "benchmarks"
+
+    p4_file = inst_dir / "test_p4.mtx.rnd"
+    p4_file.write_text("Nombre del problema: test_p4\n4 2 3\n1 2\n2 3\n3 4\n")
+
+    parser = build_automation_parser()
+    args = parser.parse_args([
+        "-i", str(inst_dir),
+        "-o", str(out_dir),
+        "-S", "cadical300",
+        "-t", "10.0",
+    ])
+    assert run_campaign(args) == 0
+
+    manifest_file = out_dir / "campaign_manifest.json"
+    assert manifest_file.exists()
+    manifest = json.loads(manifest_file.read_text())
+    assert manifest["solver"] == "cadical300"
+    assert manifest["solver_backend"] == "PySAT Solver(name='cadical300')"
+
+    res_file = out_dir / "results" / "test_p4.mtx.rnd.json"
+    assert res_file.exists()
+    res_data = json.loads(res_file.read_text())
+    assert res_data["solver"] == "cadical300"
+    assert res_data["optimal_w"] == 2
+
+

@@ -57,6 +57,12 @@ def build_automation_parser() -> argparse.ArgumentParser:
         help="Symmetry breaking mode: n (none), f (first-vertex), h (highest-degree), l (lowest-degree) (default: n)",
     )
     parser.add_argument(
+        "-S", "--solver",
+        choices=["kissat404", "cadical300"],
+        default="kissat404",
+        help="SAT solver backend to use (default: kissat404)",
+    )
+    parser.add_argument(
         "-t", "--timeout",
         type=float,
         default=1800.0,
@@ -107,6 +113,7 @@ def _process_instance(
     timeout: float,
     mem_limit: float,
     start_w_mode: str,
+    solver_name: str = "kissat404",
 ) -> dict[str, Any]:
     """Run optimization search for a single instance and save JSON log."""
     graph = parse_instance(str(inst_path))
@@ -118,7 +125,7 @@ def _process_instance(
     else:
         start_w = graph.get_lower_bound()
 
-    optimizer = ABPOptimizer()
+    optimizer = ABPOptimizer(solver_name=solver_name)
     res = optimizer.linear_search(
         graph=graph,
         start_w=start_w,
@@ -151,6 +158,7 @@ def _process_instance(
     payload: dict[str, Any] = {
         "instance": inst_path.name,
         "problem_name": graph.name or inst_path.name,
+        "solver": solver_name,
         "n": graph.n,
         "m": graph.m,
         "lower_bound": graph.get_lower_bound(),
@@ -212,8 +220,8 @@ def run_campaign(args: argparse.Namespace) -> int:
         "jobs": 1,
         "skip_existing": args.skip_existing,
         "start_w_mode": args.start_w_mode,
-        "solver": "kissat404",
-        "solver_backend": "PySAT Solver(name='kissat404')",
+        "solver": args.solver,
+        "solver_backend": f"PySAT Solver(name='{args.solver}')",
         "python_version": sys.version,
         "os_platform": platform.platform(),
         "total_instances": len(instances),
@@ -247,7 +255,7 @@ def run_campaign(args: argparse.Namespace) -> int:
     if not args.quiet:
         print(f"Starting benchmark campaign: {total} instances discovered")
         print(f"Output directory: {output_dir}")
-        print(f"Symmetry: {args.sym}, Timeout: {args.timeout}s, Mem limit: {args.mem_limit} GB")
+        print(f"Solver: {args.solver}, Symmetry: {args.sym}, Timeout: {args.timeout}s, Mem limit: {args.mem_limit} GB")
         print("-" * 75)
 
     for idx, inst_path in enumerate(instances, start=1):
@@ -266,6 +274,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 timeout=args.timeout,
                 mem_limit=args.mem_limit,
                 start_w_mode=args.start_w_mode,
+                solver_name=args.solver,
             )
         except Exception as exc:
             sys.stderr.write(f"[{idx}/{total}] ERROR processing {inst_path.name}: {exc}\n")

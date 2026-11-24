@@ -254,7 +254,7 @@ def test_solver_sentinel_ready_branch_oom(monkeypatch: pytest.MonkeyPatch) -> No
     g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
     solver = ABPSolver()
 
-    def mock_worker_oom(clauses: Any, mem_limit: Any, conn: Any, err_write_fd: Any = None) -> None:
+    def mock_worker_oom(clauses: Any, mem_limit: Any, conn: Any, err_write_fd: Any = None, *args: Any) -> None:
         if err_write_fd is not None:
             os.dup2(err_write_fd, 2)
             os.close(err_write_fd)
@@ -283,7 +283,7 @@ def test_solver_sentinel_ready_branch_error(monkeypatch: pytest.MonkeyPatch) -> 
     g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
     solver = ABPSolver()
 
-    def mock_worker_error(clauses: Any, mem_limit: Any, conn: Any, err_write_fd: Any = None) -> None:
+    def mock_worker_error(clauses: Any, mem_limit: Any, conn: Any, err_write_fd: Any = None, *args: Any) -> None:
         os._exit(1)
 
     monkeypatch.setattr(solver_module, "_solver_worker", mock_worker_error)
@@ -389,4 +389,48 @@ def test_solver_deducts_encoding_time_from_isolated_timeout(
     assert passed_timeout is not None
     assert passed_timeout < 5.0
     assert abs(passed_timeout - (5.0 - res.encoding_time)) < 0.05
+
+
+def test_cadical300_solver_direct_sat_and_unsat() -> None:
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    solver = ABPSolver(solver_name="cadical300")
+    assert solver.solver_name == "cadical300"
+
+    res_sat = solver.solve(g, w=2)
+    assert res_sat.status == "SAT"
+    assert res_sat.stats.get("solver") == "cadical300"
+    assert res_sat.stats.get("verified") is True
+    assert res_sat.labeling is not None
+    is_valid, err_msg = verify_solution(g, res_sat.labeling, 2)
+    assert is_valid, err_msg
+
+    res_unsat = solver.solve(g, w=3)
+    assert res_unsat.status == "UNSAT"
+    assert res_unsat.stats.get("solver") == "cadical300"
+
+
+def test_cadical300_solver_isolated() -> None:
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    solver = ABPSolver(solver_name="cadical300")
+    res = solver.solve(g, w=2, timeout=10.0, mem_limit=2.0)
+    assert res.status == "SAT"
+    assert res.stats.get("solver") == "cadical300"
+    assert res.labeling is not None
+
+
+def test_solver_unsupported_name_raises() -> None:
+    with pytest.raises(ValueError, match="Unsupported solver 'invalid_backend'"):
+        ABPSolver(solver_name="invalid_backend")
+
+
+def test_solver_stats_includes_solver_backend() -> None:
+    g = Graph(n=4, edges=((1, 2), (2, 3), (3, 4)))
+    k_solver = ABPSolver(solver_name="kissat404")
+    res_k = k_solver.solve(g, w=2)
+    assert res_k.stats.get("solver") == "kissat404"
+
+    c_solver = ABPSolver(solver_name="cadical300")
+    res_c = c_solver.solve(g, w=2)
+    assert res_c.stats.get("solver") == "cadical300"
+
 

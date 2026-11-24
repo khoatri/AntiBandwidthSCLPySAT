@@ -1,6 +1,6 @@
 # AntiBandwidthSCLPySAT
 
-A SAT-based solver for the **Anti-Bandwidth Problem (ABP)** using the **SCL encoding (Sequential Counter encoding for Ladder constraints)**, implemented in Python with **PySAT** and the dedicated **Kissat 4.0.4 (`kissat404`)** backend.
+A SAT-based solver for the **Anti-Bandwidth Problem (ABP)** using the **SCL encoding (Sequential Counter encoding for Ladder constraints)**, implemented in Python with **PySAT** supporting dedicated **Kissat 4.0.4 (`kissat404`)** and **CaDiCaL 3.0.0 (`cadical300`)** backends.
 
 Given an undirected graph $G = (V, E)$ with $n = |V|$ vertices, the Anti-Bandwidth Problem seeks a bijective labeling $\phi: V \to \{1, 2, \dots, n\}$ that maximizes the minimum label difference between adjacent vertices:
 
@@ -27,7 +27,7 @@ AntiBandwidthSCLPySAT/
     ├── automation.py              # Batch campaign runner across instances
     ├── comparison/                # Cross-solver comparison tooling (CaDiCaL parser & Excel generator)
     │   ├── cadical_log_parser.py  # Ingests CaDiCaL runlim logs into standard 11-col CSV
-    │   └── excel_comparator.py    # Generates multi-mode, multi-tab comparison workbooks
+    │   └── excel_comparator.py    # Generates 3-way, multi-mode comparison workbooks
     ├── encoding/                  # SCL CNF encoding engine
     │   ├── scl_encoder.py         # Main SCL formula assembler and count validator
     │   ├── ladder.py              # Prefix/suffix ladder chains & block occupancy
@@ -35,7 +35,7 @@ AntiBandwidthSCLPySAT/
     │   ├── sliding_window.py      # Aligned & crossing window edge exclusions
     │   └── symmetry.py            # Vertex label-reversal symmetry breaking
     ├── solvers/                   # Solver backend and search optimization
-    │   ├── solver.py              # PySAT kissat404 wrapper with process isolation
+    │   ├── solver.py              # PySAT kissat404 and cadical300 wrapper with process isolation
     │   └── optimizer.py           # Incremental linear search engine
     ├── utils/                     # Supporting graph utilities
     │   ├── graph.py               # Graph structure, degrees, and upper bounds
@@ -121,6 +121,7 @@ Solves a single decision problem instance: **Is $\mathrm{AB}(G) \ge w$?** Return
 | `-g` | `--graph` | `str` | *required* | Path to input graph instance file (`*.mtx.rnd`). |
 | `-w` | `--width` | `int` | `None` | Target bandwidth threshold $w$ ($2 \le w \le n$). Defaults to the graph's predefined lower bound (or `2`). |
 | `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (highest-degree), `l` (lowest-degree). |
+| `-S` | `--solver` | `choice` | `kissat404` | SAT solver backend: `kissat404`, `cadical300`. |
 | `-t` | `--timeout` | `float` | `None` | Maximum solve time limit in seconds. |
 | `-m` | `--mem-limit` | `float` | `None` | Maximum memory limit in **GB** per solve step (e.g. `30.0`). |
 | `-o` | `--output` | `str` | `None` | Path to save JSON result. Accepts a specific file (`result.json`) or a directory (`/tmp/`), which writes `<instance_name>.json`. |
@@ -130,7 +131,7 @@ Solves a single decision problem instance: **Is $\mathrm{AB}(G) \ge w$?** Return
 **Example:**
 
 ```bash
-python -m src.cli solve -g instances/A-pores_1.mtx.rnd -s h -t 30.0 -m 30.0 -o /tmp/
+python -m src.cli solve -g instances/A-pores_1.mtx.rnd -S cadical300 -s h -t 30.0 -m 30.0 -o /tmp/
 ```
 
 ---
@@ -146,6 +147,7 @@ Finds the optimal anti-bandwidth $w^*$ via incremental linear search ($w = start
 | `-g` | `--graph` | `str` | *required* | Path to input graph instance file (`*.mtx.rnd`). |
 | | `--start-w` | `int` | `None` | Starting lower bound for search ($\ge 2$). Defaults to the graph's predefined lower bound (or `2`). |
 | `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (highest-degree), `l` (lowest-degree). |
+| `-S` | `--solver` | `choice` | `kissat404` | SAT solver backend: `kissat404`, `cadical300`. |
 | `-t` | `--timeout` | `float` | `None` | Total maximum time in seconds for the entire optimization search. |
 | `-m` | `--mem-limit` | `float` | `None` | Maximum memory limit in **GB** per decision step (e.g. `30.0`). |
 | `-o` | `--output` | `str` | `None` | Path to export optimization results to JSON (file path or directory). |
@@ -155,7 +157,7 @@ Finds the optimal anti-bandwidth $w^*$ via incremental linear search ($w = start
 **Example:**
 
 ```bash
-python -m src.cli optimize -g instances/A-pores_1.mtx.rnd -s h -t 300.0 -m 30.0 -o benchmarks/results/
+python -m src.cli optimize -g instances/A-pores_1.mtx.rnd -S cadical300 -s h -t 300.0 -m 30.0 -o benchmarks/results/
 ```
 
 ---
@@ -175,6 +177,7 @@ python -m src.automation [options]
 | `-i` | `--instances-dir` | `str` | `"instances"` | Directory containing benchmark graph instances (`*.mtx.rnd`). |
 | `-o` | `--output-dir` | `str` | `"benchmarks"` | Output directory where `summary.csv`, manifest, and `results/` are stored. |
 | `-s` | `--sym` | `choice` | `n` | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (highest-degree), `l` (lowest-degree). |
+| `-S` | `--solver` | `choice` | `kissat404` | SAT solver backend: `kissat404`, `cadical300`. |
 | `-t` | `--timeout` | `float` | `1800.0` | Total timeout in seconds per instance for linear search. |
 | `-m` | `--mem-limit` | `float` | `30.0` | Maximum memory limit in **GB** per decision step. |
 | | `--skip-existing` | `flag` | `False` | Skip instances that already have completed JSON output in `output_dir/results`. |
@@ -185,7 +188,7 @@ python -m src.automation [options]
 **Example:**
 
 ```bash
-python -m src.automation -i instances -o benchmarks -s h -t 1800 -m 30 --skip-existing
+python -m src.automation -i instances -o benchmarks/cadical300/h -S cadical300 -s h -t 1800 -m 30 --skip-existing
 ```
 
 #### `summary.csv` Columns
@@ -233,4 +236,16 @@ Symmetry breaking eliminates this duality by enforcing $\phi(s) \le \lceil n/2 \
 
 ## Cross-Solver Comparison Tooling (`src.comparison`)
 
-The `src.comparison` package provides utilities to evaluate Kissat 4.0.4 results against native CaDiCaL 1.2.1 benchmarks from [AntiBandwidthSCL](https://github.com/TruongXuanHieu-H/AntiBandwidthSCL.git). Detailed benchmarking methodology, metric parity, and evaluation rules are documented in [docs/comparison.md](docs/comparison.md).
+The `src.comparison` package provides utilities to evaluate **Kissat 4.0.4**, **CaDiCaL 3.0.0**, and legacy **CaDiCaL 1.2.1** benchmarks from [AntiBandwidthSCL](https://github.com/TruongXuanHieu-H/AntiBandwidthSCL.git).
+
+### Generating 3-Way Excel Comparison
+
+```bash
+python -m src.comparison.excel_comparator \
+  --kissat404-dir benchmarks/kissat \
+  --cadical300-dir benchmarks/cadical300 \
+  --cadical121-dir benchmarks/cadical \
+  -o AntiBandwidth_Comparison.xlsx
+```
+
+Detailed benchmarking methodology, metric parity, 3-way evaluation rules, and multi-winner tie bolding are documented in [docs/comparison.md](docs/comparison.md).

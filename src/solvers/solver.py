@@ -13,6 +13,9 @@ from src.utils.graph import Graph
 from src.utils.solution_verifier import verify_solution
 
 
+SUPPORTED_SOLVERS: tuple[str, ...] = ("kissat404", "cadical300")
+
+
 @dataclass(frozen=True)
 class SolveResult:
     """Outcome of a single decision problem instance: Is AB(G) >= w?"""
@@ -31,6 +34,7 @@ def _solver_worker(
     mem_limit_gb: Optional[float],
     conn: Any,
     err_write_fd: Optional[int] = None,
+    solver_name: str = "kissat404",
 ) -> None:
     """Worker function executed inside an isolated child process."""
     try:
@@ -48,7 +52,7 @@ def _solver_worker(
             resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
 
         t0 = time.perf_counter()
-        with Solver(name="kissat404", bootstrap_with=clauses) as solver:
+        with Solver(name=solver_name, bootstrap_with=clauses) as solver:
             sat = solver.solve()
             model = solver.get_model() if sat else None
         solve_t = time.perf_counter() - t0
@@ -62,13 +66,17 @@ def _solver_worker(
 class ABPSolver:
     """Dedicated SAT solver interface for the Anti-Bandwidth Problem (ABP).
 
-    Backend: Hardcoded strictly to kissat404 via python-sat.
+    Supported Backends: "kissat404" (default), "cadical300" via python-sat.
     Process Isolation: Supports fork-based worker execution to enforce hard
     memory limits (RLIMIT_AS in GB) and timeouts, preventing memory leaks and crashes.
     """
 
-    def __init__(self) -> None:
-        self.solver_name: str = "kissat404"
+    def __init__(self, solver_name: str = "kissat404") -> None:
+        if solver_name not in SUPPORTED_SOLVERS:
+            raise ValueError(
+                f"Unsupported solver '{solver_name}'. Supported: {SUPPORTED_SOLVERS}"
+            )
+        self.solver_name: str = solver_name
 
     def _decode_labeling(
         self,
@@ -110,7 +118,7 @@ class ABPSolver:
 
         p = ctx.Process(
             target=_solver_worker,
-            args=(clauses, mem_limit_gb, child_conn, err_w),
+            args=(clauses, mem_limit_gb, child_conn, err_w, self.solver_name),
         )
         t0 = time.perf_counter()
         p.start()
@@ -214,6 +222,7 @@ class ABPSolver:
         encoding_time = time.perf_counter() - t_enc_start
 
         stats: dict[str, Any] = {
+            "solver": self.solver_name,
             "n": graph.n,
             "m": graph.m,
             "w": w,

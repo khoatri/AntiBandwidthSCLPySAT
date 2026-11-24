@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Construct command-line argument parser with solve, optimize, and inspect subcommands."""
     parser = argparse.ArgumentParser(
         prog="antibandwidth",
-        description="SCL encoding for the Anti-Bandwidth Problem (ABP) using PySAT and kissat404",
+        description="SCL encoding for the Anti-Bandwidth Problem (ABP) using PySAT (kissat404, cadical300)",
     )
     subparsers = parser.add_subparsers(dest="subcommand", help="Available subcommands")
 
@@ -90,6 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Symmetry breaking mode: n (none), f (first-vertex), h (highest-degree), l (lowest-degree) (default: n)",
     )
     solve_parser.add_argument(
+        "-S", "--solver",
+        choices=["kissat404", "cadical300"],
+        default="kissat404",
+        help="SAT solver backend to use: kissat404, cadical300 (default: kissat404)",
+    )
+    solve_parser.add_argument(
         "-t", "--timeout",
         type=float,
         default=None,
@@ -137,6 +143,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["n", "f", "h", "l"],
         default="n",
         help="Symmetry breaking mode: n (none), f (first-vertex), h (highest-degree), l (lowest-degree) (default: n)",
+    )
+    opt_parser.add_argument(
+        "-S", "--solver",
+        choices=["kissat404", "cadical300"],
+        default="kissat404",
+        help="SAT solver backend to use: kissat404, cadical300 (default: kissat404)",
     )
     opt_parser.add_argument(
         "-t", "--timeout",
@@ -245,7 +257,7 @@ def handle_solve(args: argparse.Namespace) -> int:
         )
         return 1
 
-    solver = ABPSolver()
+    solver = ABPSolver(solver_name=args.solver)
     res = solver.solve(
         graph=graph,
         w=effective_w,
@@ -262,6 +274,7 @@ def handle_solve(args: argparse.Namespace) -> int:
         print("              Anti-Bandwidth Decision Problem")
         print("=" * 60)
         print(f"Instance:      {args.graph}")
+        print(f"Solver:        {args.solver}")
         print(f"Vertices (n):  {graph.n}, Edges (m): {graph.m}")
         print(f"Target w:      {effective_w}{w_annotation}")
         print(f"Symmetry Mode: {args.sym}")
@@ -283,6 +296,7 @@ def handle_solve(args: argparse.Namespace) -> int:
         payload: dict[str, Any] = {
             "instance": args.graph,
             "problem_name": graph.name or Path(args.graph).name,
+            "solver": args.solver,
             "n": graph.n,
             "m": graph.m,
             "lower_bound": graph.get_lower_bound(),
@@ -324,7 +338,7 @@ def handle_optimize(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error: start-w must be >= 2, got start-w={effective_start_w}\n")
         return 1
 
-    optimizer = ABPOptimizer()
+    optimizer = ABPOptimizer(solver_name=args.solver)
     ub = graph.get_upper_bound()
 
     if not args.quiet:
@@ -335,6 +349,7 @@ def handle_optimize(args: argparse.Namespace) -> int:
         print("           Anti-Bandwidth Optimization Search")
         print("=" * 60)
         print(f"Instance:      {args.graph}")
+        print(f"Solver:        {args.solver}")
         print(f"Vertices (n):  {graph.n}, Edges (m): {graph.m}")
         print(f"Start w:       {effective_start_w}{start_annotation}")
         print(f"Upper Bound w: {ub}")
@@ -392,6 +407,7 @@ def handle_optimize(args: argparse.Namespace) -> int:
         payload: dict[str, Any] = {
             "instance": args.graph,
             "problem_name": graph.name or Path(args.graph).name,
+            "solver": args.solver,
             "n": graph.n,
             "m": graph.m,
             "lower_bound": graph.get_lower_bound(),

@@ -1,9 +1,10 @@
-# Cross-Solver Anti-Bandwidth Benchmark Comparison: Kissat 4.0.4 vs CaDiCaL 1.2.1
+# Cross-Solver Anti-Bandwidth Benchmark Comparison: Kissat 4.0.4 vs CaDiCaL 3.0.0 vs CaDiCaL 1.2.1
 
-This document describes the cross-solver benchmarking methodology, metrics, and automated tooling used to evaluate the **Anti-Bandwidth Problem (ABP)** Sequential Counter Ladder (SCL) formulation across two distinct SAT solver implementations:
+This document describes the cross-solver benchmarking methodology, metrics, and automated tooling used to evaluate the **Anti-Bandwidth Problem (ABP)** Sequential Counter Ladder (SCL) formulation across three distinct SAT solver configurations:
 
-1. **Kissat 4.0.4 (`kissat404`)**: Python implementation in this repository, powered by **PySAT**.
-2. **CaDiCaL 1.2.1**: The native C++ reference implementation from [AntiBandwidthSCL](https://github.com/TruongXuanHieu-H/AntiBandwidthSCL.git).
+1. **Kissat 4.0.4 (`kissat404`)**: In-process Python solver via **PySAT** with isolated fork-based worker execution.
+2. **CaDiCaL 3.0.0 (`cadical300`)**: Modern CaDiCaL solver via **PySAT** with identical isolated fork-based worker execution.
+3. **CaDiCaL 1.2.1 (`cadical121`)**: Legacy native C++ reference implementation from [AntiBandwidthSCL](https://github.com/TruongXuanHieu-H/AntiBandwidthSCL.git).
 
 For details on problem formulation and SCL ladder encoding mathematics, refer to [docs/encoding.md](encoding.md). For details on symmetry breaking modes (`n`, `f`, `h`, `l`), refer to [README.md#symmetry-breaking-modes](../README.md#symmetry-breaking-modes).
 
@@ -11,7 +12,7 @@ For details on problem formulation and SCL ladder encoding mathematics, refer to
 
 ## 1. Benchmarking Setup & Metric Parity
 
-Both solvers evaluate the standard 24 Matrix Market benchmark graph instances from Markus Sinnl (2018) under identical experimental constraints:
+All solvers evaluate the standard 24 Matrix Market benchmark graph instances from Markus Sinnl (2018) under identical experimental constraints:
 
 - **Hardware Platform**: Linux x86_64 single-threaded execution.
 - **Resource Constraints**:
@@ -19,21 +20,21 @@ Both solvers evaluate the standard 24 Matrix Market benchmark graph instances fr
   - Memory limit: **30.0 GB** per decision step.
 - **Search Strategy**: Incremental linear search from published lower bound $LB$ upward towards upper bound $UB$, terminating upon the first `UNSAT` decision or early exit at $UB$.
 
-### 1.1 Metric Parity
+### 1.1 Metric Parity Across Solver Backends
 
-To ensure an unbiased side-by-side comparison between an interpreted Python runner (PySAT) and a compiled C++ binary:
+To ensure an unbiased side-by-side comparison between the Python PySAT backends and the compiled C++ binary:
 
-| Dimension | Kissat 4.0.4 (PySAT) | CaDiCaL 1.2.1 (Native C++) |
-| :--- | :--- | :--- |
-| **Execution Wrapping** | In-process Python with `resource.RLIMIT_AS` isolation | External process managed via `runlim` (`runlim --time=1800 --real=1800 --space=30000`) |
-| **`total_time_s`** | Cumulative wall-clock search time (`res.total_time` via `time.perf_counter()`) | Cumulative wall-clock search time (`[runlim] real: <sec>`) |
-| **Optimal Bandwidth $w^*$** | Highest feasible bandwidth proved SAT before timeout / UNSAT | Highest feasible bandwidth proved SAT before timeout / UNSAT |
-| **Search Status** | `OPTIMAL`, `TIMEOUT`, `MEMOUT`, `UNSAT_START`, `ERROR` | `OPTIMAL`, `TIMEOUT`, `MEMOUT`, `UNSAT`, `ERROR` |
-| **Certificate Verification** | Independent certificate verification via `SolutionVerifier` | Internal assignment validation |
+| Dimension | Kissat 4.0.4 (PySAT) | CaDiCaL 3.0.0 (PySAT) | CaDiCaL 1.2.1 (Native C++) |
+| :--- | :--- | :--- | :--- |
+| **Execution Wrapping** | In-process Python worker with `resource.RLIMIT_AS` | In-process Python worker with `resource.RLIMIT_AS` | External process managed via `runlim` (`--time=1800 --real=1800 --space=30000`) |
+| **`total_time_s`** | Cumulative wall-clock search time (`time.perf_counter()`) | Cumulative wall-clock search time (`time.perf_counter()`) | Cumulative wall-clock search time (`[runlim] real: <sec>`) |
+| **Optimal Bandwidth $w^*$** | Highest feasible bandwidth proved SAT before timeout / UNSAT | Highest feasible bandwidth proved SAT before timeout / UNSAT | Highest feasible bandwidth proved SAT before timeout / UNSAT |
+| **Search Status** | `OPTIMAL`, `TIMEOUT`, `MEMOUT`, `UNSAT_START`, `ERROR` | `OPTIMAL`, `TIMEOUT`, `MEMOUT`, `UNSAT_START`, `ERROR` | `OPTIMAL`, `TIMEOUT`, `MEMOUT`, `UNSAT`, `ERROR` |
+| **Certificate Verification** | Independent certificate verification via `SolutionVerifier` | Independent certificate verification via `SolutionVerifier` | Internal assignment validation |
 
 ### 1.2 Standard 11-Column CSV Schema
 
-Both solvers produce (or are parsed into) a standardized 11-column `summary.csv`:
+All solvers produce (or are parsed into) a standardized 11-column `summary.csv`:
 
 ```text
 instance,n,m,lower_bound,upper_bound,optimal_w,status,total_time_s,steps_evaluated,sym_mode,verified
@@ -55,82 +56,77 @@ instance,n,m,lower_bound,upper_bound,optimal_w,status,total_time_s,steps_evaluat
 
 ## 2. Solver Comparison & Evaluation Criteria
 
-When comparing Kissat 4.0.4 and CaDiCaL 1.2.1 on an instance within a symmetry breaking mode:
+When comparing solvers on an instance within a symmetry breaking mode:
 
-1. **Bandwidth Superiority ($w^*$)**:
-   The solver that discovers a strictly higher feasible bandwidth $w^*$ is considered the superior solver for that instance.
-2. **Status Superiority**:
-   If both solvers achieve the same $w^*$, proving `OPTIMAL` (by proving $w^* + 1$ is `UNSAT` or early exiting at $UB$) beats `TIMEOUT` or `MEMOUT`.
-3. **Runtime Tie-Breaker**:
-   If both solvers prove `OPTIMAL` with identical $w^*$, the solver with the faster wall-clock runtime (`total_time_s`) is superior (threshold: $\Delta t > 0.005\text{ s}$).
-4. **Strict Timeout Tie Rule**:
-   If both solvers time out (`TIMEOUT`) at the same bandwidth $w^*$ (or both timeout before finding any SAT step), neither solver demonstrated superiority.
+1. **Zero-Solution Rule**:
+   If no solver discovers a feasible labeling (i.e. all solvers have `optimal_w is None`), no solver is crowned a winner and no cells are bolded.
+2. **Bandwidth Superiority ($w^*$)**:
+   The solver that discovers a strictly higher feasible bandwidth $w^*$ is the superior solver for that instance.
+3. **Status Superiority**:
+   If multiple solvers achieve the same $w^*$, proving `OPTIMAL` (by proving $w^* + 1$ is `UNSAT` or early exiting at $UB$) beats `TIMEOUT` or `MEMOUT`.
+4. **Runtime Tie-Breaker**:
+   If multiple solvers prove `OPTIMAL` with identical $w^*$, the solver with the faster wall-clock runtime (`total_time_s`) is superior (threshold: $\Delta t > 0.005\text{ s}$).
+5. **Multi-Winner Tie Rule**:
+   If multiple solvers tie for first place (e.g. both are `OPTIMAL` with runtimes within $0.005\text{ s}$, or both tie at the highest $w^*$ with `TIMEOUT` status), all tying winners have their three result cells (`optimal_w`, `time`, `status`) bolded.
 
 ---
 
 ## 3. Comparison Tooling (`src.comparison`)
 
-The repository provides two dedicated tools in `src/comparison/` for ingesting CaDiCaL benchmark logs and compiling cross-solver Excel comparisons:
+The repository provides two dedicated tools in `src/comparison/` for benchmark campaigns and cross-solver Excel comparisons:
 
 ### 3.1 CaDiCaL Log Parser (`cadical_log_parser.py`)
 
 Parses raw CaDiCaL `.out` logs wrapped with `runlim` from [AntiBandwidthSCL](https://github.com/TruongXuanHieu-H/AntiBandwidthSCL.git) and compiles them into the standardized 11-column `summary.csv`.
 
-**Key Capabilities:**
-- Extracts step results, bounds, per-step runtimes, and status.
-- Extracts `[runlim] real: <sec>` wall-clock time.
-- **Analytical Edge Deduction**: When instance header files are unavailable, calculates edge count $m$ using the exact SCL sliding window clause count formula:
-  $$m = \frac{C_{\text{glue}}}{e(n, w)}$$
-  where $C_{\text{glue}}$ is the count of glue clauses and $e(n, w)$ is the theoretical clause count per edge.
-
-**Arguments:**
-
-| Flag | Long Option | Type | Default | Description |
-| :--- | :--- | :---: | :---: | :--- |
-| `-i` | `--input-dir` | `Path` | *required* | Directory containing CaDiCaL `.out` log files (wrapped with `runlim`). |
-| `-o` | `--output-csv` | `Path` | `<input-dir>/summary.csv` | Destination path for the generated summary CSV file. |
-| `-s` | `--sym-mode` | `choice` | *auto* | Symmetry breaking mode: `n` (none), `f` (first-vertex), `h` (highest-degree), `l` (lowest-degree). Auto-detected from directory or file names if omitted. |
-| | `--instances-dir` | `Path` | `None` | Optional directory containing original benchmark instances (`*.mtx.rnd`) to cross-check graph parameters ($n, m$). |
-| `-q` | `--quiet` | `flag` | `False` | Suppress per-file console progress messages. |
-| `-h` | `--help` | | | Show help message and exit. |
-
 **Example:**
 
 ```bash
-python -m src.comparison.cadical_log_parser -i build/symmetry-breaking-mode-f
+python -m src.comparison.cadical_log_parser -i build/symmetry-breaking-mode-f -o benchmarks/cadical/f/summary.csv
 ```
 
 ---
 
 ### 3.2 Excel Comparator (`excel_comparator.py`)
 
-Ingests Kissat and CaDiCaL summary CSVs across one or more symmetry breaking modes (`n`, `f`, `h`, `l`) and generates a multi-tab Microsoft Excel (`.xlsx`) workbook.
+Ingests summary CSVs across solvers and symmetry breaking modes (`n`, `f`, `h`, `l`) and generates a unified multi-mode, multi-tab Microsoft Excel (`.xlsx`) workbook.
 
-**Arguments:**
+#### Layout Structure per Symmetry Mode:
+- **Instance Metadata (5 columns)**: `Instance`, `n`, `m`, `Lower Bound`, `Upper Bound`.
+- **Kissat 4.0.4 (3 columns)**: `Optimal w`, `Time (s)`, `Status`.
+- **CaDiCaL 3.0.0 (3 columns)**: `Optimal w`, `Time (s)`, `Status`.
+- **CaDiCal 1.2.1 (3 columns)**: `Optimal w`, `Time (s)`, `Status`.
+
+#### Arguments:
 
 | Flag | Long Option | Type | Default | Description |
 | :--- | :--- | :---: | :---: | :--- |
-| | `--kissat-f` | `Path` | `None` | Path to Kissat summary CSV for symmetry mode `f`. |
-| | `--cadical-f` | `Path` | `None` | Path to CaDiCaL summary CSV for symmetry mode `f`. |
-| | `--kissat-h` | `Path` | `None` | Path to Kissat summary CSV for symmetry mode `h`. |
-| | `--cadical-h` | `Path` | `None` | Path to CaDiCaL summary CSV for symmetry mode `h`. |
-| | `--kissat-n` | `Path` | `None` | Path to Kissat summary CSV for symmetry mode `n`. |
-| | `--cadical-n` | `Path` | `None` | Path to CaDiCaL summary CSV for symmetry mode `n`. |
-| | `--kissat-l` | `Path` | `None` | Path to Kissat summary CSV for symmetry mode `l`. |
-| | `--cadical-l` | `Path` | `None` | Path to CaDiCaL summary CSV for symmetry mode `l`. |
-| | `--kissat-dir` | `Path` | `None` | Directory containing Kissat summary CSVs (e.g. `summary_mode_f.csv`, `f/summary.csv`). |
-| | `--cadical-dir` | `Path` | `None` | Directory containing CaDiCaL summary CSVs (e.g. `cadical_summary_mode_f.csv`, `f/summary.csv`). |
+| | `--kissat404-f`, `--kissat-f` | `Path` | `None` | Path to Kissat 4.0.4 summary CSV for mode `f`. |
+| | `--cadical300-f` | `Path` | `None` | Path to CaDiCaL 3.0.0 summary CSV for mode `f`. |
+| | `--cadical121-f`, `--cadical-f` | `Path` | `None` | Path to CaDiCal 1.2.1 summary CSV for mode `f`. |
+| | `--kissat404-h`, `--kissat-h` | `Path` | `None` | Path to Kissat 4.0.4 summary CSV for mode `h`. |
+| | `--cadical300-h` | `Path` | `None` | Path to CaDiCaL 3.0.0 summary CSV for mode `h`. |
+| | `--cadical121-h`, `--cadical-h` | `Path` | `None` | Path to CaDiCal 1.2.1 summary CSV for mode `h`. |
+| | `--kissat404-dir`, `--kissat-dir` | `Path` | `None` | Directory containing Kissat summary CSVs. |
+| | `--cadical300-dir` | `Path` | `None` | Directory containing CaDiCaL 3.0.0 summary CSVs. |
+| | `--cadical121-dir`, `--cadical-dir` | `Path` | `None` | Directory containing CaDiCal 1.2.1 summary CSVs. |
 | `-o` | `--output-xlsx` | `Path` | `AntiBandwidth_Comparison.xlsx` | Output Excel workbook file path. |
 | | `--title` | `str` | `Comparison` | Title of main comparison worksheet. |
 | `-h` | `--help` | | | Show help message and exit. |
 
-**Example:**
+#### Complete 3-Way Workflow Example:
 
 ```bash
+# 1. Run Kissat 4.0.4 Campaign for mode h
+python -m src.automation -i instances -o benchmarks/kissat/h -S kissat404 -s h -t 1800 -m 30 --skip-existing
+
+# 2. Run CaDiCaL 3.0.0 Campaign for mode h
+python -m src.automation -i instances -o benchmarks/cadical300/h -S cadical300 -s h -t 1800 -m 30 --skip-existing
+
+# 3. Generate 3-Way Comparison Workbook
 python -m src.comparison.excel_comparator \
-  --kissat-f benchmarks/f/summary.csv \
-  --cadical-f cadical/f/summary.csv \
-  --kissat-h benchmarks/h/summary.csv \
-  --cadical-h cadical/h/summary.csv \
-  -o comparison_f_and_h.xlsx
+  --kissat404-dir benchmarks/kissat \
+  --cadical300-dir benchmarks/cadical300 \
+  --cadical121-dir benchmarks/cadical \
+  -o AntiBandwidth_Comparison.xlsx
 ```
