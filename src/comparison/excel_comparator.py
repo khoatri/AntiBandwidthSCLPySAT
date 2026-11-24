@@ -1,4 +1,5 @@
 import argparse
+import colorsys
 import csv
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +45,7 @@ class SolverSpec:
     sheet_prefix: str
     tier1_key: str
     tier2_key: str
+    font_key: str
 
 
 SOLVER_SPECS: List[SolverSpec] = [
@@ -53,6 +55,7 @@ SOLVER_SPECS: List[SolverSpec] = [
         sheet_prefix="Kissat_4.0.4",
         tier1_key="kissat_tier1",
         tier2_key="kissat_tier2",
+        font_key="kissat_font",
     ),
     SolverSpec(
         key="cadical300",
@@ -60,6 +63,7 @@ SOLVER_SPECS: List[SolverSpec] = [
         sheet_prefix="CaDiCaL_3.0.0",
         tier1_key="cadical300_tier1",
         tier2_key="cadical300_tier2",
+        font_key="cadical300_font",
     ),
     SolverSpec(
         key="cadical121",
@@ -67,6 +71,7 @@ SOLVER_SPECS: List[SolverSpec] = [
         sheet_prefix="CaDiCal_1.2.1",
         tier1_key="cadical_tier1",
         tier2_key="cadical_tier2",
+        font_key="cadical_font",
     ),
 ]
 
@@ -219,47 +224,60 @@ def determine_bold_cells(
 
 # Pastel Color Palette for Cross-Solver Comparison (8-char ARGB hex for LibreOffice compatibility)
 # Zero grayish tones: warm pastels for metadata, colorful pastels for symmetry modes and solvers.
+# Each cell fill color is paired with a matching bolder/darker font color from the same hue family.
 PASTEL_PALETTE = {
     "metadata": {
         "tier1_fill": "FFFFF9C4",  # Warm Pastel Butter / Cream
         "tier1_font": "FF7D6608",  # Dark Warm Amber
         "tier2_fill": "FFFFFDE7",  # Light Warm Ivory / Pale Butter
-        "tier2_font": "FF6E2C00",  # Dark Warm Brown
+        "tier2_font": "FF7D6608",  # Dark Warm Amber
     },
     "f": {
         "kissat_tier1": "FFA9DFBF",  # Pastel Mint Green
         "kissat_tier2": "FFD4EFDF",
+        "kissat_font": "FF145A32",   # Dark Forest Green
         "cadical300_tier1": "FFFAD7A0",  # Pastel Apricot / Warm Amber
         "cadical300_tier2": "FFFDEBD0",
+        "cadical300_font": "FF7E3B02",   # Deep Amber / Warm Russet
         "cadical_tier1": "FFA2D9CE",  # Pastel Aqua / Teal
         "cadical_tier2": "FFD1F2EB",
+        "cadical_font": "FF0E6251",   # Dark Teal
         "font": "FF145A32",
     },
     "h": {
-        "kissat_tier1": "FFFAD7A0",  # Pastel Apricot
+        "kissat_tier1": "FFFAD7A0",  # Pastel Apricot / Warm Amber
         "kissat_tier2": "FFFDEBD0",
+        "kissat_font": "FF7E3B02",   # Deep Amber / Warm Russet
         "cadical300_tier1": "FFAED6F1",  # Pastel Sky Blue
         "cadical300_tier2": "FFD6EAF8",
+        "cadical300_font": "FF1B4F72",   # Dark Navy / Deep Ocean Blue
         "cadical_tier1": "FFEDBB99",  # Pastel Coral / Peach
         "cadical_tier2": "FFFBEEE6",
+        "cadical_font": "FF6E2C00",   # Dark Russet / Terracotta
         "font": "FF6E2C00",
     },
     "n": {
         "kissat_tier1": "FFAED6F1",  # Pastel Sky Blue
         "kissat_tier2": "FFD6EAF8",
-        "cadical300_tier1": "FFA9DFBF",  # Pastel Mint
+        "kissat_font": "FF1B4F72",   # Dark Navy / Deep Ocean Blue
+        "cadical300_tier1": "FFA9DFBF",  # Pastel Mint Green
         "cadical300_tier2": "FFD4EFDF",
+        "cadical300_font": "FF145A32",   # Dark Forest Green
         "cadical_tier1": "FFD2B4DE",  # Pastel Lavender Blue
         "cadical_tier2": "FFE8DAEF",
+        "cadical_font": "FF512E5F",   # Deep Plum / Violet
         "font": "FF1B4F72",
     },
     "l": {
         "kissat_tier1": "FFD7BDE2",  # Pastel Lilac
         "kissat_tier2": "FFE8DAEF",
+        "kissat_font": "FF512E5F",   # Deep Plum / Violet
         "cadical300_tier1": "FFA2D9CE",  # Pastel Aqua
         "cadical300_tier2": "FFD1F2EB",
+        "cadical300_font": "FF0E6251",   # Dark Teal
         "cadical_tier1": "FFF5CBA7",  # Pastel Cantaloupe
         "cadical_tier2": "FFFBEEE6",
+        "cadical_font": "FF7E3B02",   # Dark Burnt Orange / Amber
         "font": "FF512E5F",
     },
 }
@@ -282,16 +300,75 @@ STATUS_FONTS = {
     "ERROR": "FF721C24",        # Dark Coral Red
 }
 
+FILL_TO_FONT_COLOR: Dict[str, str] = {
+    # Metadata (Pastel Butter / Ivory -> Dark Warm Amber)
+    "FFFFF9C4": "FF7D6608",
+    "FFFFFDE7": "FF7D6608",
+    # Mint Green family (Pastel Mint -> Dark Forest Green)
+    "FFA9DFBF": "FF145A32",
+    "FFD4EFDF": "FF145A32",
+    # Apricot / Warm Amber family (Pastel Apricot -> Deep Amber / Warm Russet)
+    "FFFAD7A0": "FF7E3B02",
+    "FFFDEBD0": "FF7E3B02",
+    # Aqua / Teal family (Pastel Aqua -> Dark Teal)
+    "FFA2D9CE": "FF0E6251",
+    "FFD1F2EB": "FF0E6251",
+    # Sky Blue family (Pastel Sky Blue -> Dark Navy / Deep Ocean Blue)
+    "FFAED6F1": "FF1B4F72",
+    "FFD6EAF8": "FF1B4F72",
+    # Coral / Peach family (Pastel Coral -> Dark Russet / Terracotta)
+    "FFEDBB99": "FF6E2C00",
+    "FFFBEEE6": "FF6E2C00",
+    # Lavender / Lilac family (Pastel Lavender/Lilac -> Deep Plum / Violet)
+    "FFD2B4DE": "FF512E5F",
+    "FFD7BDE2": "FF512E5F",
+    "FFE8DAEF": "FF512E5F",
+    # Cantaloupe family (Pastel Cantaloupe -> Dark Burnt Orange / Amber)
+    "FFF5CBA7": "FF7E3B02",
+    # Status fills
+    "FFFADBD8": "FF922B21",
+    "FFFCF3CF": "FF7D6608",
+    "FFF5C6CB": "FF721C24",
+}
+
+
+def derive_bolder_font_color(fill_hex: str) -> str:
+    """Return a matching bolder/darker font color for any cell fill color."""
+    clean = fill_hex.upper().lstrip("#")
+    if len(clean) == 6:
+        clean = "FF" + clean
+    if clean in FILL_TO_FONT_COLOR:
+        return FILL_TO_FONT_COLOR[clean]
+
+    # Algorithmic fallback using HLS
+    rgb_part = clean[2:] if len(clean) == 8 else clean
+    try:
+        r, g, b = (int(rgb_part[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        target_l = 0.22
+        target_s = min(1.0, s * 1.35) if s > 0.08 else s
+        nr, ng, nb = colorsys.hls_to_rgb(h, target_l, target_s)
+        return f"FF{int(round(nr * 255)):02X}{int(round(ng * 255)):02X}{int(round(nb * 255)):02X}"
+    except Exception:
+        return "FF000000"
+
 
 def _format_replica_sheet(
     ws: Any,
     csv_path: Path,
     header_fill_hex: str,
-    header_font_hex: str,
-    regular_font: Font,
-    border: Border,
+    header_font_hex: Optional[str] = None,
+    regular_font: Optional[Font] = None,
+    border: Optional[Border] = None,
 ) -> None:
     """Format a 1:1 copy of a summary.csv file as an Excel sheet."""
+    if header_font_hex is None:
+        header_font_hex = derive_bolder_font_color(header_fill_hex)
+    if regular_font is None:
+        regular_font = Font(name="Liberation Sans", size=10)
+    if border is None:
+        border = Border()
+
     header_font = Font(name="Liberation Sans", size=10, bold=True, color=header_font_hex)
     header_fill = PatternFill(
         start_color=header_fill_hex, end_color=header_fill_hex, fill_type="solid"
@@ -345,16 +422,18 @@ def _format_replica_sheet(
                         status_val = str(cell.value or "").strip().upper()
                         cell.alignment = Alignment(horizontal="center")
                         if status_val in STATUS_PASTEL_FILLS:
+                            fill_hex = STATUS_PASTEL_FILLS[status_val]
+                            font_hex = STATUS_FONTS.get(status_val) or derive_bolder_font_color(fill_hex)
                             cell.fill = PatternFill(
-                                start_color=STATUS_PASTEL_FILLS[status_val],
-                                end_color=STATUS_PASTEL_FILLS[status_val],
+                                start_color=fill_hex,
+                                end_color=fill_hex,
                                 fill_type="solid",
                             )
                             cell.font = Font(
                                 name="Liberation Sans",
                                 size=10,
                                 bold=True,
-                                color=STATUS_FONTS.get(status_val, "FF000000"),
+                                color=font_hex,
                             )
                     elif header_name in ("sym_mode", "verified"):
                         cell.alignment = Alignment(horizontal="center")
@@ -492,13 +571,17 @@ def generate_excel_comparison(
         active_specs = active_solvers_by_mode[mode]
 
         for spec in active_specs:
-            s_tier1_font = Font(name=font_family, size=11, bold=True, color=pal["font"])
+            s_t1_fill = pal[spec.tier1_key]
+            s_t2_fill = pal[spec.tier2_key]
+            s_font_hex = pal.get(spec.font_key) or derive_bolder_font_color(s_t1_fill)
+
+            s_tier1_font = Font(name=font_family, size=11, bold=True, color=s_font_hex)
             s_tier1_fill = PatternFill(
-                start_color=pal[spec.tier1_key], end_color=pal[spec.tier1_key], fill_type="solid"
+                start_color=s_t1_fill, end_color=s_t1_fill, fill_type="solid"
             )
-            s_tier2_font = Font(name=font_family, size=10, bold=True, color=pal["font"])
+            s_tier2_font = Font(name=font_family, size=10, bold=True, color=s_font_hex)
             s_tier2_fill = PatternFill(
-                start_color=pal[spec.tier2_key], end_color=pal[spec.tier2_key], fill_type="solid"
+                start_color=s_t2_fill, end_color=s_t2_fill, fill_type="solid"
             )
 
             # Tier 1 (Row 1): 3 columns merged
@@ -590,16 +673,18 @@ def generate_excel_comparison(
                 status_cell.alignment = Alignment(horizontal="center", vertical="center")
                 status_cell.border = thin_border
                 if status_val in STATUS_PASTEL_FILLS:
+                    fill_hex = STATUS_PASTEL_FILLS[status_val]
+                    font_hex = STATUS_FONTS.get(status_val) or derive_bolder_font_color(fill_hex)
                     status_cell.fill = PatternFill(
-                        start_color=STATUS_PASTEL_FILLS[status_val],
-                        end_color=STATUS_PASTEL_FILLS[status_val],
+                        start_color=fill_hex,
+                        end_color=fill_hex,
                         fill_type="solid",
                     )
                     status_cell.font = Font(
                         name=font_family,
                         size=10,
                         bold=is_winner,
-                        color=STATUS_FONTS.get(status_val, "FF000000"),
+                        color=font_hex,
                     )
                 else:
                     status_cell.font = bold_font if is_winner else regular_font
@@ -632,8 +717,10 @@ def generate_excel_comparison(
             fpath = raw_solvers.get(spec.key, {}).get(mode)
             if fpath and fpath.is_file():
                 ws_rep = wb.create_sheet(title=f"{spec.sheet_prefix}_{mode}")
+                s_t1_fill = pal[spec.tier1_key]
+                s_font_hex = pal.get(spec.font_key) or derive_bolder_font_color(s_t1_fill)
                 _format_replica_sheet(
-                    ws_rep, fpath, pal[spec.tier1_key], pal["font"], regular_font, thin_border
+                    ws_rep, fpath, s_t1_fill, s_font_hex, regular_font, thin_border
                 )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)

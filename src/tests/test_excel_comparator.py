@@ -532,5 +532,103 @@ def test_cli_directory_discovery_3way(tmp_path: Path) -> None:
         sys.argv = orig_argv
 
 
+def test_derive_bolder_font_color() -> None:
+    from src.comparison.excel_comparator import derive_bolder_font_color
+
+    # Exact registered mappings
+    assert derive_bolder_font_color("FFA9DFBF") == "FF145A32"  # Mint Green -> Dark Forest Green
+    assert derive_bolder_font_color("FFFAD7A0") == "FF7E3B02"  # Apricot -> Deep Amber
+    assert derive_bolder_font_color("FFA2D9CE") == "FF0E6251"  # Aqua -> Dark Teal
+    assert derive_bolder_font_color("FFAED6F1") == "FF1B4F72"  # Sky Blue -> Dark Navy
+    assert derive_bolder_font_color("FFFFF9C4") == "FF7D6608"  # Butter -> Dark Amber
+    assert derive_bolder_font_color("FFFFFDE7") == "FF7D6608"  # Ivory -> Dark Amber
+
+    # 6-char hex support and hash strip
+    assert derive_bolder_font_color("A9DFBF") == "FF145A32"
+    assert derive_bolder_font_color("#A9DFBF") == "FF145A32"
+
+    # Algorithmic fallback for unknown pastel color
+    derived = derive_bolder_font_color("FFE0F2FE")  # Very light sky blue
+    assert derived.startswith("FF")
+    assert len(derived) == 8
+    # Fallback handles invalid hex gracefully
+    assert derive_bolder_font_color("invalid") == "FF000000"
+
+
+def test_cells_with_color_have_matching_bolder_fonts(tmp_path: Path) -> None:
+    from src.comparison.excel_comparator import generate_excel_comparison
+
+    kissat_f = tmp_path / "k_f.csv"
+    cadical300_f = tmp_path / "c3_f.csv"
+    cadical121_f = tmp_path / "c1_f.csv"
+    cadical300_h = tmp_path / "c3_h.csv"
+
+    kissat_f.write_text(SAMPLE_KISSAT_CSV)
+    cadical300_f.write_text(SAMPLE_CADICAL300_CSV)
+    cadical121_f.write_text(SAMPLE_CADICAL_CSV)
+    cadical300_h.write_text(SAMPLE_CADICAL300_CSV)
+
+    out_xlsx = tmp_path / "matching_fonts.xlsx"
+    generate_excel_comparison(
+        kissat404_files={"f": kissat_f},
+        cadical300_files={"f": cadical300_f, "h": cadical300_h},
+        cadical121_files={"f": cadical121_f},
+        output_xlsx=out_xlsx,
+    )
+
+    wb = openpyxl.load_workbook(out_xlsx)
+    ws = wb["Comparison"]
+
+    # 1. Metadata Headers (Row 1 & 2): Butter/Ivory fills have matching dark warm amber font
+    assert ws["A1"].fill.start_color.rgb == "FFFFF9C4"
+    assert ws["A1"].font.color.rgb == "FF7D6608"
+    assert ws["A2"].fill.start_color.rgb == "FFFFFDE7"
+    assert ws["A2"].font.color.rgb == "FF7D6608"
+
+    # 2. Mode f Solver Headers:
+    # Kissat 4.0.4: Mint green fill -> Dark Forest Green font
+    assert ws["F1"].value == "Kissat 4.0.4 (f)"
+    assert ws["F1"].fill.start_color.rgb == "FFA9DFBF"
+    assert ws["F1"].font.color.rgb == "FF145A32"
+    assert ws["F2"].fill.start_color.rgb == "FFD4EFDF"
+    assert ws["F2"].font.color.rgb == "FF145A32"
+
+    # CaDiCaL 3.0.0: Apricot/amber fill -> Deep Amber font (NOT green!)
+    assert ws["I1"].value == "CaDiCaL 3.0.0 (f)"
+    assert ws["I1"].fill.start_color.rgb == "FFFAD7A0"
+    assert ws["I1"].font.color.rgb == "FF7E3B02"
+    assert ws["I2"].fill.start_color.rgb == "FFFDEBD0"
+    assert ws["I2"].font.color.rgb == "FF7E3B02"
+
+    # CaDiCal 1.2.1: Aqua/teal fill -> Dark Teal font (NOT green!)
+    assert ws["L1"].value == "CaDiCal 1.2.1 (f)"
+    assert ws["L1"].fill.start_color.rgb == "FFA2D9CE"
+    assert ws["L1"].font.color.rgb == "FF0E6251"
+    assert ws["L2"].fill.start_color.rgb == "FFD1F2EB"
+    assert ws["L2"].font.color.rgb == "FF0E6251"
+
+    # 3. Mode h Solver Headers:
+    # CaDiCaL 3.0.0 (h): Sky blue fill -> Dark Navy Blue font (NOT brown!)
+    assert ws["O1"].value == "CaDiCaL 3.0.0 (h)"
+    assert ws["O1"].fill.start_color.rgb == "FFAED6F1"
+    assert ws["O1"].font.color.rgb == "FF1B4F72"
+    assert ws["O2"].fill.start_color.rgb == "FFD6EAF8"
+    assert ws["O2"].font.color.rgb == "FF1B4F72"
+
+    # 4. Replica Sheet headers have matching bold font
+    rep_c3_f = wb["CaDiCaL_3.0.0_f"]
+    assert rep_c3_f["A1"].fill.start_color.rgb == "FFFAD7A0"
+    assert rep_c3_f["A1"].font.color.rgb == "FF7E3B02"
+
+    rep_c3_h = wb["CaDiCaL_3.0.0_h"]
+    assert rep_c3_h["A1"].fill.start_color.rgb == "FFAED6F1"
+    assert rep_c3_h["A1"].font.color.rgb == "FF1B4F72"
+
+    rep_c1_f = wb["CaDiCal_1.2.1_f"]
+    assert rep_c1_f["A1"].fill.start_color.rgb == "FFA2D9CE"
+    assert rep_c1_f["A1"].font.color.rgb == "FF0E6251"
+
+
+
 
 
